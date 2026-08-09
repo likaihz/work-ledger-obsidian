@@ -19,7 +19,7 @@ import type { PageContext } from "./types";
 export function renderOverviewPage(parent: HTMLElement, context: PageContext): void {
   const { snapshot } = context.state;
   if (!snapshot) {
-    emptyState(parent, "Work Ledger 暂不可用", context.state.connection.message, "plug-zap");
+    emptyState(parent, "Agent Ledger 暂不可用", context.state.connection.message, "plug-zap");
     return;
   }
 
@@ -38,7 +38,7 @@ export function renderOverviewPage(parent: HTMLElement, context: PageContext): v
   if (context.state.connection.phase === "stale") {
     refresh.createSpan({ text: "数据可能已过期", cls: "work-ledger-stale-copy" });
   }
-  iconButton(refresh, "refresh-cw", "刷新 Work Ledger", () => context.actions.refresh());
+  iconButton(refresh, "refresh-cw", "刷新 Agent Ledger", () => context.actions.refresh());
 
   const today = dateKey(snapshot.generatedAt, snapshot.vault.timezone);
   const focus = todayFocus(snapshot, today);

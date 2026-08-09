@@ -8,7 +8,7 @@ const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8
 const packageJson = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const versions = JSON.parse(readFileSync(path.join(root, "versions.json"), "utf8"));
 
-if (manifest.id !== "work-ledger" || manifest.isDesktopOnly !== true) {
+if (manifest.id !== "agent-ledger" || manifest.isDesktopOnly !== true) {
   throw new Error("Plugin manifest identity or desktop boundary is invalid.");
 }
 if (manifest.version !== packageJson.version) {
@@ -18,7 +18,7 @@ if (versions[manifest.version] !== manifest.minAppVersion) {
   throw new Error("versions.json does not map the current plugin version.");
 }
 
-const output = path.join(root, "dist", "work-ledger");
+const output = path.join(root, "dist", manifest.id);
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 const artifacts = ["main.js", "manifest.json", "styles.css", "LICENSE"];

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,26 @@ import { describe, expect, it } from "vitest";
 const packageRoot = process.cwd();
 
 describe("selected Work Ledger visual contract", () => {
+  it("presents the plugin as Agent Ledger", () => {
+    const identityPath = path.join(packageRoot, "src", "plugin-identity.ts");
+    expect(existsSync(identityPath)).toBe(true);
+    if (!existsSync(identityPath)) {
+      return;
+    }
+    const identity = readFileSync(identityPath, "utf8");
+    const main = readFileSync(path.join(packageRoot, "src", "main.ts"), "utf8");
+    const view = readFileSync(
+      path.join(packageRoot, "src", "views", "work-ledger-view.ts"),
+      "utf8",
+    );
+    expect(identity).toContain('export const PLUGIN_DISPLAY_NAME = "Agent Ledger";');
+    expect(main).toContain('`Open ${PLUGIN_DISPLAY_NAME}`');
+    expect(view).toContain("return PLUGIN_DISPLAY_NAME;");
+    expect(view).toContain('`${PLUGIN_DISPLAY_NAME} 页面`');
+    expect(view).toContain('`搜索 ${PLUGIN_DISPLAY_NAME}`');
+    expect(view).toContain('`${PLUGIN_DISPLAY_NAME} 尚未连接。`');
+  });
+
   it("uses the approved global Overview composition", () => {
     const overview = readFileSync(
       path.join(packageRoot, "src", "views", "pages", "overview-page.ts"),

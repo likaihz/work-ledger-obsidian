@@ -1,6 +1,6 @@
-# Work Ledger for Obsidian
+# Agent Ledger for Obsidian
 
-Work Ledger is a desktop-only, read-only Obsidian view for the independently distributed `work-ledger` CLI. It visualizes projects, inherited task hierarchy, effective work events, weekly reports, health findings, native links, and backlinks without becoming a second writer for managed Markdown.
+Agent Ledger is a desktop-only, read-only Obsidian view for the independently distributed `work-ledger` CLI and its Work Ledger data. It visualizes projects, inherited task hierarchy, effective work events, weekly reports, health findings, native links, and backlinks without becoming a second writer for managed Markdown.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ npm run verify
 The verified install directory is:
 
 ```text
-dist/work-ledger/
+dist/agent-ledger/
 ├── main.js
 ├── manifest.json
 ├── styles.css
@@ -56,10 +56,10 @@ dist/work-ledger/
 Copy `main.js`, `manifest.json`, and `styles.css` into:
 
 ```text
-<development-vault>/.obsidian/plugins/work-ledger/
+<development-vault>/.obsidian/plugins/agent-ledger/
 ```
 
-Reload Obsidian, enable Work Ledger, and configure the absolute CLI path. Always use a separate synthetic development Vault while developing or testing the plugin.
+Reload Obsidian, enable Agent Ledger, and configure the absolute CLI path. Always use a separate synthetic development Vault while developing or testing the plugin.
 
 The CLI entry must also work without interactive shell initialization. Prefer
 an isolated-environment console script with an absolute Python shebang. A

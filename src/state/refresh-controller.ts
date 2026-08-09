@@ -58,7 +58,7 @@ export class RefreshController {
     const previous = this.store.get().snapshot;
     this.store.setConnection({
       phase: previous ? "refreshing" : "checking",
-      message: previous ? "Refreshing Work Ledger…" : "Checking work-ledger and Vault…",
+      message: previous ? "Refreshing Agent Ledger…" : "Checking work-ledger and Vault…",
       ...(previous ? { lastSuccessfulAt: this.store.get().connection.lastSuccessfulAt } : {}),
     });
     try {
@@ -277,7 +277,7 @@ function domainFailure(error: unknown): {
     };
   }
   return {
-    message: error instanceof Error ? error.message : "Work Ledger refresh failed.",
+    message: error instanceof Error ? error.message : "Agent Ledger refresh failed.",
     code: "REFRESH_FAILED",
   };
 }

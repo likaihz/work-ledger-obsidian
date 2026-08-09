@@ -1,9 +1,9 @@
 {
-  "id": "work-ledger",
-  "name": "Work Ledger",
-  "version": "0.1.0",
+  "id": "agent-ledger",
+  "name": "Agent Ledger",
+  "version": "0.1.1",
   "minAppVersion": "1.12.0",
-  "description": "Read-only project, task, timeline, report, and health views for Work Ledger.",
+  "description": "Read-only Agent Ledger views for Work Ledger projects, tasks, timelines, reports, and health.",
   "author": "litiezhu",
   "isDesktopOnly": true
 }

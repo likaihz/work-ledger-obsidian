@@ -7,6 +7,7 @@ import {
   type WorkLedgerSettings,
 } from "./settings";
 import { currentVaultIdentity } from "./obsidian/vault-identity";
+import { PLUGIN_DISPLAY_NAME } from "./plugin-identity";
 import { LedgerStore } from "./state/ledger-store";
 import { RefreshController } from "./state/refresh-controller";
 import {
@@ -26,7 +27,7 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
       WORK_LEDGER_VIEW_TYPE,
       (leaf: WorkspaceLeaf) => new WorkLedgerView(leaf, this),
     );
-    this.addRibbonIcon("notebook-tabs", "Open work ledger", () => void this.activateView());
+    this.addRibbonIcon("notebook-tabs", `Open ${PLUGIN_DISPLAY_NAME}`, () => void this.activateView());
     this.addCommand({
       id: "open",
       name: "Open",
@@ -37,7 +38,7 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
       name: "Refresh read-only snapshot",
       callback: () => {
         if (!this.refreshController) {
-          new Notice("Work ledger is waiting for the Obsidian layout.");
+          new Notice(`${PLUGIN_DISPLAY_NAME} is waiting for the Obsidian layout.`);
           return;
         }
         void this.refreshController.refresh(false);

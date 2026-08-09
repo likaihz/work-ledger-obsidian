@@ -15,6 +15,7 @@ import type {
 } from "../cli/protocol";
 import { backlinksForPath } from "../obsidian/backlinks";
 import { openJournalEvent, openVaultPath } from "../obsidian/navigation";
+import { PLUGIN_DISPLAY_NAME } from "../plugin-identity";
 import type { WorkLedgerSettings, WorkLedgerRoute } from "../settings";
 import { snapshotContains, type LedgerStore } from "../state/ledger-store";
 import type { RefreshController } from "../state/refresh-controller";
@@ -71,7 +72,7 @@ export class WorkLedgerView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Work ledger";
+    return PLUGIN_DISPLAY_NAME;
   }
 
   getIcon(): string {
@@ -145,7 +146,7 @@ export class WorkLedgerView extends ItemView {
     const topbar = parent.createDiv({ cls: "work-ledger-topbar" });
     const nav = topbar.createEl("nav", {
       cls: "work-ledger-topnav",
-      attr: { "aria-label": "Work ledger 页面" },
+      attr: { "aria-label": `${PLUGIN_DISPLAY_NAME} 页面` },
     });
     for (const item of NAVIGATION) {
       const button = nav.createEl("button", {
@@ -168,7 +169,7 @@ export class WorkLedgerView extends ItemView {
       type: "search",
       placeholder: "搜索项目、任务和事件…",
       value: this.searchQuery,
-      attr: { "aria-label": "搜索 work ledger" },
+      attr: { "aria-label": `搜索 ${PLUGIN_DISPLAY_NAME}` },
     });
     this.searchInput.addEventListener("input", () => {
       this.searchQuery = this.searchInput?.value ?? "";
@@ -627,7 +628,7 @@ export class WorkLedgerView extends ItemView {
   ): Promise<void> {
     const controller = this.host.controller();
     if (!controller) {
-      new Notice("Work ledger 尚未连接。");
+      new Notice(`${PLUGIN_DISPLAY_NAME} 尚未连接。`);
       return;
     }
     try {

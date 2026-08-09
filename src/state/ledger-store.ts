@@ -130,7 +130,7 @@ export class LedgerStore {
       details,
       connection: {
         phase: "ready",
-        message: "Work Ledger is current.",
+        message: "Agent Ledger is current.",
         lastSuccessfulAt: new Date().toISOString(),
       },
     });

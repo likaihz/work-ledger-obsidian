@@ -5,7 +5,7 @@ import { builtinModules } from "node:module";
 const production = process.argv[2] === "production";
 const context = await esbuild.context({
   banner: {
-    js: "/* Generated Work Ledger Obsidian plugin bundle. */",
+    js: "/* Generated Agent Ledger Obsidian plugin bundle. */",
   },
   entryPoints: ["src/main.ts"],
   bundle: true,

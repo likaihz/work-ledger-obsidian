@@ -10,7 +10,9 @@ describe("plugin package boundary", () => {
     const manifest = JSON.parse(readFileSync(path.join(packageRoot, "manifest.json"), "utf8")) as Record<string, unknown>;
     const packageJson = JSON.parse(readFileSync(path.join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
     const versions = JSON.parse(readFileSync(path.join(packageRoot, "versions.json"), "utf8")) as Record<string, unknown>;
-    expect(manifest.id).toBe("work-ledger");
+    expect(manifest.id).toBe("agent-ledger");
+    expect(manifest.name).toBe("Agent Ledger");
+    expect(packageJson.name).toBe("agent-ledger-obsidian");
     expect(manifest.isDesktopOnly).toBe(true);
     expect(packageJson.version).toBe(manifest.version);
     expect(versions[String(manifest.version)]).toBe(manifest.minAppVersion);
@@ -20,6 +22,12 @@ describe("plugin package boundary", () => {
     expect(readFileSync(path.join(packageRoot, "LICENSE"), "utf8")).toContain(
       "Copyright (c) 2026 litiezhu",
     );
+    const packageScript = readFileSync(
+      path.join(packageRoot, "tools", "package.mjs"),
+      "utf8",
+    );
+    expect(packageScript).toContain('manifest.id !== "agent-ledger"');
+    expect(packageScript).toContain('path.join(root, "dist", manifest.id)');
   });
 
   it("does not expose write, sync, or Graph clients", () => {

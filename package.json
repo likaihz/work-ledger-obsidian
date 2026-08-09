@@ -1,7 +1,7 @@
 {
-  "name": "work-ledger-obsidian",
-  "version": "0.1.0",
-  "description": "Read-only Work Ledger visualization and navigation for Obsidian",
+  "name": "agent-ledger-obsidian",
+  "version": "0.1.1",
+  "description": "Read-only Agent Ledger visualization of Work Ledger data in Obsidian",
   "main": "main.js",
   "type": "module",
   "engines": {
