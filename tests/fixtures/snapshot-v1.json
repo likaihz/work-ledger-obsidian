@@ -1,0 +1,104 @@
+{
+  "ok": true,
+  "data": {
+    "snapshot_schema_version": 1,
+    "generated_at": "2026-07-31T10:00:00+08:00",
+    "vault": {
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema_version": 4,
+      "timezone": "Asia/Shanghai"
+    },
+    "source": {
+      "head_commit": "0123456789abcdef",
+      "work_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "projects": [
+      {
+        "id": "project-20260731-001",
+        "title": "Work Ledger 插件",
+        "path": "Work/Projects/Work Ledger 插件.md",
+        "wikilink": "[[Work/Projects/Work Ledger 插件|Work Ledger 插件]]",
+        "status": "active",
+        "visibility": "private",
+        "effective_visibility": "private",
+        "start_date": "2026-07-31",
+        "end_date": null,
+        "tags": [
+          "obsidian"
+        ],
+        "created_at": "2026-07-31T09:00:00+08:00",
+        "updated_at": "2026-07-31T09:00:00+08:00",
+        "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "task-20260731-001",
+        "title": "实现只读总览",
+        "path": "Work/Tasks/实现只读总览.md",
+        "wikilink": "[[Work/Tasks/实现只读总览|实现只读总览]]",
+        "project_id": "project-20260731-001",
+        "parent_id": null,
+        "status": "in_progress",
+        "initial_status": "planned",
+        "priority": "P1",
+        "visibility": "private",
+        "effective_visibility": "private",
+        "planned_for": "2026-07-31",
+        "due_date": null,
+        "tags": [],
+        "created_at": "2026-07-31T09:05:00+08:00",
+        "updated_at": "2026-07-31T09:10:00+08:00",
+        "status_changed_at": "2026-07-31T09:10:00+08:00",
+        "completed_at": null,
+        "revision": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      {
+        "id": "task-20260731-002",
+        "title": "渲染任务树",
+        "path": "Work/Tasks/渲染任务树.md",
+        "wikilink": "[[Work/Tasks/渲染任务树|渲染任务树]]",
+        "project_id": "project-20260731-001",
+        "parent_id": "task-20260731-001",
+        "status": "planned",
+        "initial_status": "planned",
+        "priority": "P2",
+        "visibility": "private",
+        "effective_visibility": "private",
+        "planned_for": null,
+        "due_date": null,
+        "tags": [],
+        "created_at": "2026-07-31T09:06:00+08:00",
+        "updated_at": "2026-07-31T09:06:00+08:00",
+        "status_changed_at": "2026-07-31T09:06:00+08:00",
+        "completed_at": null,
+        "revision": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    ],
+    "events": [
+      {
+        "id": "event-20260731-091000-001",
+        "journal_path": "Work/Journal/2026/07/2026-07-31.md",
+        "occurred_at": "2026-07-31T09:10:00+08:00",
+        "recorded_at": "2026-07-31T09:10:01+08:00",
+        "time_precision": "exact",
+        "type": "progress",
+        "project_id": "project-20260731-001",
+        "task_id": "task-20260731-001",
+        "summary": "完成运行时底座",
+        "visibility": "private",
+        "effective_visibility": "private",
+        "source": "codex"
+      }
+    ],
+    "reports": [],
+    "event_window": {
+      "from": "2026-06-26T00:00:00+08:00",
+      "to": "2026-08-01T00:00:00+08:00",
+      "truncated": false,
+      "next_cursor": null
+    },
+    "snapshot_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "warnings": []
+}
