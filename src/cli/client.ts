@@ -57,6 +57,7 @@ export interface LedgerReadClient {
   ): Promise<LedgerSnapshot>;
   projectShow(id: string, signal?: AbortSignal): Promise<JsonRecord>;
   taskShow(id: string, signal?: AbortSignal): Promise<JsonRecord>;
+  knowledgeShow(id: string, signal?: AbortSignal): Promise<JsonRecord>;
   eventShow(id: string, view: "effective" | "audit", signal?: AbortSignal): Promise<JsonRecord>;
   reportDue(at: string, signal?: AbortSignal): Promise<JsonRecord>;
   reportFacts(
@@ -232,6 +233,10 @@ export class LedgerCliClient implements LedgerReadClient {
     return decodeSuccessData(await this.run(["task", "show", "--id", id], signal));
   }
 
+  async knowledgeShow(id: string, signal?: AbortSignal): Promise<JsonRecord> {
+    return decodeSuccessData(await this.run(["knowledge", "show", "--id", id], signal));
+  }
+
   async eventShow(id: string, view: "effective" | "audit", signal?: AbortSignal): Promise<JsonRecord> {
     return decodeSuccessData(
       await this.run(["event", "show", "--id", id, "--view", view], signal),
@@ -283,11 +288,11 @@ export class LedgerCliClient implements LedgerReadClient {
 }
 
 export function isCompatibleCliVersion(version: string): boolean {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:[a-z0-9.-]*)?$/i.exec(version);
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
   if (!match) {
     return false;
   }
   const major = Number(match[1]);
   const minor = Number(match[2]);
-  return major === 0 && minor >= 8;
+  return major === 0 && minor >= 11;
 }

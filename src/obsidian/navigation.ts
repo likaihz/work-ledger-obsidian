@@ -18,7 +18,11 @@ export async function openJournalEvent(app: App, path: string, eventId: string):
   const line = view.editor
     .getValue()
     .split("\n")
-    .findIndex((value) => value.includes(`"id":"${eventId}"`));
+    .findIndex(
+      (value) =>
+        value.startsWith("<!-- work-ledger:event ") &&
+        value.includes(`"id":"${eventId}"`),
+    );
   if (line < 0) {
     new Notice("The event position changed. Refresh work ledger to locate it again.");
     return;

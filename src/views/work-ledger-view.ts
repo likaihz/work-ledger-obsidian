@@ -1,4 +1,5 @@
 import {
+  Component,
   ItemView,
   MarkdownRenderer,
   Notice,
@@ -11,13 +12,19 @@ import { exportAgentContext } from "../agent/context-exporter";
 import type {
   EntityRef,
   LedgerEvent,
+  LedgerKnowledge,
   LedgerSnapshot,
 } from "../cli/protocol";
 import { backlinksForPath } from "../obsidian/backlinks";
 import { openJournalEvent, openVaultPath } from "../obsidian/navigation";
 import { PLUGIN_DISPLAY_NAME } from "../plugin-identity";
+import { routeForSearchResult } from "../routing";
 import type { WorkLedgerSettings, WorkLedgerRoute } from "../settings";
-import { snapshotContains, type LedgerStore } from "../state/ledger-store";
+import {
+  snapshotContains,
+  type LedgerState,
+  type LedgerStore,
+} from "../state/ledger-store";
 import type { RefreshController } from "../state/refresh-controller";
 import { search, taskTree, type TaskTreeNode } from "../state/selectors";
 import {
@@ -29,12 +36,14 @@ import {
   textButton,
 } from "../ui/components";
 import { renderHealthPage } from "./pages/health-page";
+import { renderKnowledgePage } from "./pages/knowledge-page";
 import { renderOverviewPage } from "./pages/overview-page";
 import { renderProjectsPage } from "./pages/projects-page";
 import { renderReportsPage } from "./pages/reports-page";
 import { renderTimelinePage } from "./pages/timeline-page";
 import type { PageActions } from "./pages/types";
 import { InspectorHistory } from "./inspector-history";
+import { canPatchKnowledgeInspector } from "./knowledge-render-strategy";
 
 export const WORK_LEDGER_VIEW_TYPE = "work-ledger-main";
 
@@ -49,6 +58,7 @@ export interface WorkLedgerViewHost {
 const NAVIGATION: Array<{ route: WorkLedgerRoute; label: string; icon: string }> = [
   { route: "overview", label: "总览", icon: "layout-dashboard" },
   { route: "projects", label: "项目", icon: "folder-kanban" },
+  { route: "knowledge", label: "知识", icon: "library-big" },
   { route: "timeline", label: "时间线", icon: "clock-3" },
   { route: "reports", label: "周报", icon: "file-bar-chart" },
   { route: "health", label: "健康", icon: "heart-pulse" },
@@ -60,6 +70,11 @@ export class WorkLedgerView extends ItemView {
   private searchQuery = "";
   private searchInput: HTMLInputElement | null = null;
   private searchResults: HTMLElement | null = null;
+  private renderedState: LedgerState | null = null;
+  private renderedRoute: WorkLedgerRoute | null = null;
+  private mainEl: HTMLElement | null = null;
+  private inspectorEl: HTMLElement | null = null;
+  private inspectorMarkdownComponent: Component | null = null;
   private readonly inspectorHistory = new InspectorHistory();
 
   constructor(leaf: WorkspaceLeaf, private readonly host: WorkLedgerViewHost) {
@@ -80,7 +95,7 @@ export class WorkLedgerView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.unsubscribe = this.host.store.subscribe(() => this.render());
+    this.unsubscribe = this.host.store.subscribe((state) => this.render(state));
     this.registerDomEvent(this.containerEl, "keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
@@ -98,6 +113,13 @@ export class WorkLedgerView extends ItemView {
   async onClose(): Promise<void> {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.clearInspectorMarkdown();
+    this.renderedState = null;
+    this.renderedRoute = null;
+    this.mainEl = null;
+    this.inspectorEl = null;
+    this.searchInput = null;
+    this.searchResults = null;
   }
 
   focusSearch(): void {
@@ -112,10 +134,25 @@ export class WorkLedgerView extends ItemView {
     } else if (route === "health") {
       void this.host.controller()?.loadDoctor();
     }
-    this.render();
+    this.render(this.host.store.get());
   }
 
-  private render(): void {
+  private render(state: LedgerState): void {
+    if (
+      canPatchKnowledgeInspector(
+        this.renderedRoute,
+        this.route,
+        this.renderedState,
+        state,
+      ) &&
+      this.patchKnowledgeInspector(state)
+    ) {
+      this.renderedState = state;
+      this.renderedRoute = this.route;
+      return;
+    }
+
+    this.clearInspectorMarkdown();
     const root = this.contentEl;
     root.empty();
     root.addClass("work-ledger-root");
@@ -126,12 +163,16 @@ export class WorkLedgerView extends ItemView {
     this.renderSidebar(shell.createEl("aside", { cls: "work-ledger-sidebar" }));
     const main = shell.createEl("main", { cls: "work-ledger-main" });
     const inspector = shell.createEl("aside", { cls: "work-ledger-inspector" });
+    this.mainEl = main;
+    this.inspectorEl = inspector;
     const actions = this.pageActions();
-    const context = { state: this.host.store.get(), actions };
+    const context = { state, actions };
     if (this.route === "overview") {
       renderOverviewPage(main, context);
     } else if (this.route === "projects") {
       renderProjectsPage(main, context);
+    } else if (this.route === "knowledge") {
+      renderKnowledgePage(main, context);
     } else if (this.route === "timeline") {
       renderTimelinePage(main, context);
     } else if (this.route === "reports") {
@@ -139,7 +180,27 @@ export class WorkLedgerView extends ItemView {
     } else {
       renderHealthPage(main, context);
     }
-    this.renderInspector(inspector);
+    this.renderInspector(inspector, state);
+    this.renderedState = state;
+    this.renderedRoute = this.route;
+  }
+
+  private patchKnowledgeInspector(state: LedgerState): boolean {
+    const main = this.mainEl;
+    const inspector = this.inspectorEl;
+    if (!main?.isConnected || !inspector?.isConnected) {
+      return false;
+    }
+    const selectedId = state.selection?.kind === "knowledge" ? state.selection.id : null;
+    main.querySelectorAll<HTMLElement>("[data-knowledge-id]").forEach((card) => {
+      const selected = card.dataset.knowledgeId === selectedId;
+      card.setAttribute("aria-current", String(selected));
+      card.closest(".work-ledger-knowledge-card-shell")?.classList.toggle("is-selected", selected);
+    });
+    this.clearInspectorMarkdown();
+    inspector.empty();
+    this.renderInspector(inspector, state);
+    return true;
   }
 
   private renderTopbar(parent: HTMLElement): void {
@@ -167,7 +228,7 @@ export class WorkLedgerView extends ItemView {
     setIcon(searchIcon, "search");
     this.searchInput = searchWrap.createEl("input", {
       type: "search",
-      placeholder: "搜索项目、任务和事件…",
+      placeholder: "搜索项目、任务、知识和事件…",
       value: this.searchQuery,
       attr: { "aria-label": `搜索 ${PLUGIN_DISPLAY_NAME}` },
     });
@@ -202,13 +263,7 @@ export class WorkLedgerView extends ItemView {
       button.addEventListener("click", () => {
         this.searchQuery = "";
         this.select({ kind: result.kind, id: result.id });
-        if (result.kind === "event") {
-          void this.setRoute("timeline");
-        } else if (result.kind === "report") {
-          void this.setRoute("reports");
-        } else {
-          void this.setRoute("projects");
-        }
+        void this.setRoute(routeForSearchResult(result.kind));
       });
     }
   }
@@ -227,7 +282,7 @@ export class WorkLedgerView extends ItemView {
     bar.createSpan({ text: connection.message });
     if (snapshot) {
       bar.createSpan({
-        text: `${snapshot.projects.length} 个项目 · ${snapshot.tasks.length} 个任务 · ${snapshot.events.length} 个事件`,
+        text: `${snapshot.projects.length} 个项目 · ${snapshot.tasks.length} 个任务 · ${snapshot.knowledge.length} 个知识 · ${snapshot.events.length} 个事件`,
         cls: "work-ledger-status-meta",
       });
     }
@@ -311,8 +366,7 @@ export class WorkLedgerView extends ItemView {
     }
   }
 
-  private renderInspector(parent: HTMLElement): void {
-    const state = this.host.store.get();
+  private renderInspector(parent: HTMLElement, state: LedgerState): void {
     const ref = state.selection;
     const snapshot = state.snapshot;
     if (snapshot) {
@@ -347,9 +401,9 @@ export class WorkLedgerView extends ItemView {
           text: `${projectOpenTaskCount(state.snapshot, scopedProject.id)} 个活跃任务`,
           cls: "work-ledger-inspector-scope-summary",
         });
-        emptyState(parent, "尚未选择对象", "选择任务、项目或事件后在这里查看完整上下文。", "mouse-pointer-2");
+        emptyState(parent, "尚未选择对象", "选择任务、项目、知识或事件后在这里查看完整上下文。", "mouse-pointer-2");
       } else {
-        emptyState(parent, "尚未选择对象", "选择任务、项目或事件后在这里查看完整上下文。", "mouse-pointer-2");
+        emptyState(parent, "尚未选择对象", "选择任务、项目、知识或事件后在这里查看完整上下文。", "mouse-pointer-2");
       }
       return;
     }
@@ -374,24 +428,37 @@ export class WorkLedgerView extends ItemView {
       badge(metadata, entity.priority, entity.priority.toLocaleLowerCase());
     }
 
+    const detail = this.host.store.getDetail(ref);
     parent.createEl("h3", { text: "核心属性" });
     this.renderEntityFacts(parent, ref, entity, state.snapshot);
-    this.renderInspectorRecent(parent, state.snapshot, ref);
+    this.renderEntityRelations(parent, state.snapshot, ref, entity, detail);
+    if (ref.kind !== "knowledge") {
+      this.renderInspectorRecent(parent, state.snapshot, ref);
+    }
     this.renderBacklinks(parent, path);
 
-    const detail = this.host.store.getDetail(ref);
     if (ref.kind !== "report") {
       const loadingKey = `${ref.kind}:${ref.id}`;
       if (!detail && state.detailLoading === loadingKey) {
-        parent.createDiv({ text: "正在读取正文摘要…", cls: "work-ledger-loading" });
+        parent.createDiv({
+          text: ref.kind === "knowledge" ? "正在读取正文…" : "正在读取正文摘要…",
+          cls: "work-ledger-loading",
+        });
       } else if (!detail) {
-        textButton(parent, "读取正文摘要", () => void this.host.controller()?.loadDetail(ref));
+        textButton(
+          parent,
+          ref.kind === "knowledge" ? "读取正文" : "读取正文摘要",
+          () => void this.host.controller()?.loadDetail(ref),
+        );
       } else {
         const body = detail.body;
         if (typeof body === "string" && body.trim()) {
-          parent.createEl("h3", { text: "正文摘要" });
+          parent.createEl("h3", { text: ref.kind === "knowledge" ? "正文" : "正文摘要" });
           const bodyEl = parent.createDiv({ cls: "work-ledger-markdown" });
-          void MarkdownRenderer.render(this.app, body, bodyEl, path ?? "", this);
+          const component = new Component();
+          component.load();
+          this.inspectorMarkdownComponent = component;
+          void MarkdownRenderer.render(this.app, body, bodyEl, path ?? "", component);
         }
       }
     }
@@ -416,7 +483,12 @@ export class WorkLedgerView extends ItemView {
       cls: "work-ledger-inspector-action-hint",
     });
     if (path) {
-      textButton(actions, ref.kind === "event" ? "打开 Journal" : "打开 Markdown", () => {
+      const openLabel = ref.kind === "event"
+        ? "打开 Journal"
+        : ref.kind === "knowledge"
+          ? "打开笔记"
+          : "打开 Markdown";
+      textButton(actions, openLabel, () => {
         if (ref.kind === "event") {
           void openJournalEvent(this.app, path, ref.id);
         } else {
@@ -428,6 +500,11 @@ export class WorkLedgerView extends ItemView {
     this.renderDiagnostics(parent, state.snapshot, ref, entity, path);
   }
 
+  private clearInspectorMarkdown(): void {
+    this.inspectorMarkdownComponent?.unload();
+    this.inspectorMarkdownComponent = null;
+  }
+
   private renderEntityFacts(
     parent: HTMLElement,
     ref: EntityRef,
@@ -436,60 +513,88 @@ export class WorkLedgerView extends ItemView {
   ): void {
     const facts = parent.createEl("dl", { cls: "work-ledger-facts" });
     const rows: Array<{ label: string; value: unknown; target?: EntityRef }> = [];
-    if (ref.kind === "project") {
-      rows.push(
-        { label: "可见范围", value: visibilityLabel(entity.effectiveVisibility) },
-        { label: "开始日期", value: entity.startDate },
-        { label: "结束日期", value: entity.endDate },
-        { label: "标签", value: entity.tags },
-        { label: "活跃任务", value: projectOpenTaskCount(snapshot, ref.id) },
-      );
-    } else if (ref.kind === "task") {
-      const project = snapshot.projects.find((candidate) => candidate.id === entity.projectId);
-      const parentTask = snapshot.tasks.find((candidate) => candidate.id === entity.parentId);
-      rows.push(
-        {
-          label: "所属项目",
-          value: project?.title,
-          ...(project ? { target: { kind: "project", id: project.id } } : {}),
-        },
-        {
-          label: "父任务",
-          value: parentTask?.title,
-          ...(parentTask ? { target: { kind: "task", id: parentTask.id } } : {}),
-        },
-        { label: "计划时间", value: entity.plannedFor },
-        { label: "截止日期", value: entity.dueDate },
-        { label: "可见范围", value: visibilityLabel(entity.effectiveVisibility) },
-        { label: "标签", value: entity.tags },
-      );
-    } else if (ref.kind === "event") {
-      const project = snapshot.projects.find((candidate) => candidate.id === entity.projectId);
-      const task = snapshot.tasks.find((candidate) => candidate.id === entity.taskId);
-      rows.push(
-        {
-          label: "事件类型",
-          value: typeof entity.type === "string" ? eventTypeLabel(entity.type as LedgerEvent["type"]) : entity.type,
-        },
-        { label: "发生时间", value: formatInspectorDate(entity.occurredAt) },
-        { label: "记录时间", value: formatInspectorDate(entity.recordedAt) },
-        {
-          label: "所属项目",
-          value: project?.title,
-          ...(project ? { target: { kind: "project", id: project.id } } : {}),
-        },
-        {
-          label: "关联任务",
-          value: task?.title,
-          ...(task ? { target: { kind: "task", id: task.id } } : {}),
-        },
-        { label: "记录来源", value: entity.source },
-      );
-    } else {
-      rows.push(
-        { label: "版本", value: entity.audience === "personal" ? "个人版" : "可汇报版" },
-        { label: "生成时间", value: formatInspectorDate(entity.generatedAt) },
-      );
+    switch (ref.kind) {
+      case "project":
+        rows.push(
+          { label: "可见范围", value: visibilityLabel(entity.effectiveVisibility) },
+          { label: "开始日期", value: entity.startDate },
+          { label: "结束日期", value: entity.endDate },
+          { label: "标签", value: entity.tags },
+          { label: "活跃任务", value: projectOpenTaskCount(snapshot, ref.id) },
+        );
+        break;
+      case "task": {
+        const project = snapshot.projects.find((candidate) => candidate.id === entity.projectId);
+        const parentTask = snapshot.tasks.find((candidate) => candidate.id === entity.parentId);
+        rows.push(
+          {
+            label: "所属项目",
+            value: project?.title,
+            ...(project ? { target: { kind: "project", id: project.id } } : {}),
+          },
+          {
+            label: "父任务",
+            value: parentTask?.title,
+            ...(parentTask ? { target: { kind: "task", id: parentTask.id } } : {}),
+          },
+          { label: "计划时间", value: entity.plannedFor },
+          { label: "截止日期", value: entity.dueDate },
+          { label: "可见范围", value: visibilityLabel(entity.effectiveVisibility) },
+          { label: "标签", value: entity.tags },
+        );
+        break;
+      }
+      case "knowledge": {
+        const project = snapshot.projects.find((candidate) => candidate.id === entity.projectId);
+        rows.push(
+          { label: "类型", value: knowledgeKindLabel(entity.kind) },
+          { label: "状态", value: knowledgeStatusLabel(entity.status) },
+          { label: "Slug", value: entity.slug },
+          {
+            label: "所属项目",
+            value: project?.title ?? "无 Project",
+            ...(project ? { target: { kind: "project", id: project.id } } : {}),
+          },
+          { label: "声明可见范围", value: visibilityLabel(entity.visibility) },
+          { label: "有效可见范围", value: visibilityLabel(entity.effectiveVisibility) },
+          { label: "更新时间", value: formatInspectorDate(entity.updatedAt) },
+          { label: "标签", value: entity.tags },
+        );
+        break;
+      }
+      case "event": {
+        const project = snapshot.projects.find((candidate) => candidate.id === entity.projectId);
+        const task = snapshot.tasks.find((candidate) => candidate.id === entity.taskId);
+        rows.push(
+          {
+            label: "事件类型",
+            value: isEventType(entity.type) ? eventTypeLabel(entity.type) : "未知类型",
+          },
+          { label: "发生时间", value: formatInspectorDate(entity.occurredAt) },
+          { label: "记录时间", value: formatInspectorDate(entity.recordedAt) },
+          {
+            label: "所属项目",
+            value: project?.title,
+            ...(project ? { target: { kind: "project", id: project.id } } : {}),
+          },
+          {
+            label: "关联任务",
+            value: task?.title,
+            ...(task ? { target: { kind: "task", id: task.id } } : {}),
+          },
+          { label: "有效可见范围", value: visibilityLabel(entity.effectiveVisibility) },
+          { label: "记录来源", value: entity.source },
+        );
+        break;
+      }
+      case "report":
+        rows.push(
+          { label: "版本", value: entity.audience === "personal" ? "个人版" : "可汇报版" },
+          { label: "生成时间", value: formatInspectorDate(entity.generatedAt) },
+        );
+        break;
+      default:
+        assertNever(ref.kind);
     }
     for (const row of rows) {
       facts.createEl("dt", { text: row.label });
@@ -501,10 +606,133 @@ export class WorkLedgerView extends ItemView {
           cls: "work-ledger-fact-link",
           attr: { "aria-label": `查看${row.label}：${displayUnknown(row.value)}` },
         });
-        link.addEventListener("click", () => this.navigateInspector(target));
+        link.addEventListener("click", () => this.selectRelated(target));
       } else {
         value.setText(displayUnknown(row.value));
       }
+    }
+  }
+
+  private renderEntityRelations(
+    parent: HTMLElement,
+    snapshot: LedgerSnapshot,
+    ref: EntityRef,
+    entity: Record<string, unknown>,
+    detail: Readonly<Record<string, unknown>> | null,
+  ): void {
+    switch (ref.kind) {
+      case "knowledge":
+        this.renderKnowledgeSources(parent, snapshot, entity, detail);
+        return;
+      case "event":
+        this.renderEventKnowledge(parent, snapshot, detail);
+        return;
+      case "project":
+      case "task":
+      case "report":
+        return;
+      default:
+        assertNever(ref.kind);
+    }
+  }
+
+  private renderKnowledgeSources(
+    parent: HTMLElement,
+    snapshot: LedgerSnapshot,
+    entity: Record<string, unknown>,
+    detail: Readonly<Record<string, unknown>> | null,
+  ): void {
+    const sourceIds = stringArray(entity.sourceEventIds);
+    parent.createEl("h3", { text: `来源事件 (${sourceIds.length})` });
+    const suppressed = new Set(detailIds(detail, "suppressed_source_event_ids", new Set(sourceIds)));
+    if (suppressed.size > 0) {
+      const warning = parent.createDiv({
+        cls: "work-ledger-source-warning",
+        attr: { role: "note" },
+      });
+      const icon = warning.createSpan();
+      setIcon(icon, "triangle-alert");
+      const copy = warning.createDiv();
+      copy.createEl("strong", { text: "部分来源事件已被抑制" });
+      copy.createDiv({
+        text: `这些来源仍是合法审计依据，但不再是当前有效事件：${[...suppressed].join(" · ")}`,
+      });
+    }
+    const details = sourceEventDetails(detail, new Set(sourceIds));
+    const list = parent.createDiv({ cls: "work-ledger-knowledge-sources" });
+    if (sourceIds.length === 0) {
+      list.createDiv({ text: "未关联来源事件。", cls: "work-ledger-muted" });
+      return;
+    }
+    for (const id of sourceIds) {
+      const event = snapshot.events.find((candidate) => candidate.id === id);
+      const source = details.get(id);
+      const summary = event?.summary ?? source?.summary ?? id;
+      const row = list.createDiv({
+        cls: `work-ledger-knowledge-source${suppressed.has(id) ? " is-suppressed" : ""}`,
+      });
+      const copy = row.createDiv({ cls: "work-ledger-knowledge-source-copy" });
+      copy.createDiv({ text: summary, cls: "work-ledger-knowledge-source-summary" });
+      copy.createDiv({
+        text: event
+          ? `${eventTypeLabel(event.type)} · ${displayUnknown(formatInspectorDate(event.occurredAt))}`
+          : source
+            ? [
+                eventTypeLabel(source.type),
+                displayUnknown(visibilityLabel(source.effectiveVisibility)),
+                ...(source.occurredAt === null
+                  ? []
+                  : [displayUnknown(formatInspectorDate(source.occurredAt))]),
+              ].join(" · ")
+            : id,
+        cls: "work-ledger-muted",
+      });
+      if (event) {
+        const target: EntityRef = { kind: "event", id: event.id };
+        iconButton(row, "panel-right-open", `查看来源事件：${summary}`, () => {
+          this.selectRelated(target);
+        });
+        iconButton(row, "book-open", `打开来源 Journal：${summary}`, () => {
+          void openJournalEvent(this.app, event.journalPath, event.id);
+        });
+      } else if (source?.journalPath) {
+        const journalPath = source.journalPath;
+        iconButton(row, "book-open", `打开来源 Journal：${summary}`, () => {
+          void openJournalEvent(this.app, journalPath, id);
+        });
+      }
+    }
+  }
+
+  private renderEventKnowledge(
+    parent: HTMLElement,
+    snapshot: LedgerSnapshot,
+    detail: Readonly<Record<string, unknown>> | null,
+  ): void {
+    const byId = new Map(snapshot.knowledge.map((item) => [item.id, item]));
+    const knowledgeIds = detailIds(detail, "knowledge_ids", new Set(byId.keys()));
+    if (knowledgeIds.length === 0) {
+      return;
+    }
+    parent.createEl("h3", { text: `派生知识 (${knowledgeIds.length})` });
+    const list = parent.createDiv({ cls: "work-ledger-event-knowledge" });
+    for (const id of knowledgeIds) {
+      const knowledge = byId.get(id);
+      if (!knowledge) {
+        continue;
+      }
+      const button = list.createEl("button", {
+        cls: "work-ledger-event-knowledge-link",
+        attr: { "aria-label": `查看派生知识：${knowledge.title}` },
+      });
+      button.createSpan({ text: knowledge.title });
+      button.createSpan({
+        text: `${knowledgeKindLabel(knowledge.kind)} · ${knowledgeStatusLabel(knowledge.status)}`,
+        cls: "work-ledger-muted",
+      });
+      button.addEventListener("click", () => {
+        this.selectRelated({ kind: "knowledge", id: knowledge.id });
+      });
     }
   }
 
@@ -528,7 +756,7 @@ export class WorkLedgerView extends ItemView {
       });
       button.createSpan({ text: eventTypeLabel(event.type), cls: `is-${event.type}` });
       button.createSpan({ text: event.summary, cls: "work-ledger-inspector-event-summary" });
-      button.addEventListener("click", () => this.navigateInspector({ kind: "event", id: event.id }));
+      button.addEventListener("click", () => this.selectRelated({ kind: "event", id: event.id }));
     }
   }
 
@@ -576,12 +804,20 @@ export class WorkLedgerView extends ItemView {
     this.openInspector(ref);
   }
 
-  private navigateInspector(ref: EntityRef): void {
+  private selectRelated(ref: EntityRef): void {
     const current = this.host.store.get().selection;
-    if (current) {
-      this.inspectorHistory.push(current, ref);
+    const snapshot = this.host.store.get().snapshot;
+    if (
+      current &&
+      snapshot &&
+      this.inspectorHistory.push(
+        current,
+        ref,
+        (candidate) => snapshotContains(snapshot, candidate),
+      )
+    ) {
+      this.openInspector(ref);
     }
-    this.openInspector(ref);
   }
 
   private goBackInspector(): void {
@@ -651,6 +887,8 @@ export class WorkLedgerView extends ItemView {
       select: (ref) => this.select(ref),
       clearSelection: () => this.closeInspector(),
       setProjectScope: (projectId) => this.host.store.setFilters({ projectId }),
+      setTimelineEventTypes: (types) => this.host.store.setTimelineEventTypes(types),
+      setKnowledgeFilters: (filters) => this.host.store.setKnowledgeFilters(filters),
       route: (route) => void this.setRoute(route),
       refresh: () => void this.host.controller()?.refresh(false),
       loadDoctor: () => void this.host.controller()?.loadDoctor(),
@@ -667,21 +905,25 @@ function selectedEntity(
   snapshot: NonNullable<ReturnType<WorkLedgerViewHost["store"]["get"]>["snapshot"]>,
   ref: EntityRef,
 ): Record<string, unknown> | null {
-  if (ref.kind === "project") {
-    return (snapshot.projects.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
+  switch (ref.kind) {
+    case "project":
+      return (snapshot.projects.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
+    case "task":
+      return (snapshot.tasks.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
+    case "knowledge":
+      return (snapshot.knowledge.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
+    case "event":
+      return (snapshot.events.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
+    case "report":
+      return (
+        (snapshot.reports.find((item) => `${item.isoWeek}:${item.audience}` === ref.id) as unknown as Record<
+          string,
+          unknown
+        >) ?? null
+      );
+    default:
+      return assertNever(ref.kind);
   }
-  if (ref.kind === "task") {
-    return (snapshot.tasks.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
-  }
-  if (ref.kind === "event") {
-    return (snapshot.events.find((item) => item.id === ref.id) as unknown as Record<string, unknown>) ?? null;
-  }
-  return (
-    (snapshot.reports.find((item) => `${item.isoWeek}:${item.audience}` === ref.id) as unknown as Record<
-      string,
-      unknown
-    >) ?? null
-  );
 }
 
 function entityPath(entity: Record<string, unknown>): string | null {
@@ -707,6 +949,7 @@ function kindLabel(kind: EntityRef["kind"]): string {
   return {
     project: "项目",
     task: "任务",
+    knowledge: "知识",
     event: "事件",
     report: "周报",
   }[kind];
@@ -723,7 +966,13 @@ function statusLabel(status: string): string {
   ) {
     return taskStatusLabel(status);
   }
-  return status === "active" ? "进行中" : status === "archived" ? "已归档" : status;
+  if (status === "active") {
+    return "进行中";
+  }
+  if (status === "draft" || status === "stable" || status === "archived") {
+    return knowledgeStatusLabel(status);
+  }
+  return status;
 }
 
 function visibilityLabel(value: unknown): unknown {
@@ -764,7 +1013,18 @@ function inspectorBreadcrumb(snapshot: LedgerSnapshot, ref: EntityRef): string {
     const task = snapshot.tasks.find((candidate) => candidate.id === event.taskId);
     return [project?.title, task?.title, eventTypeLabel(event.type)].filter(Boolean).join(" / ");
   }
-  return "周报";
+  if (ref.kind === "knowledge") {
+    const knowledge = snapshot.knowledge.find((candidate) => candidate.id === ref.id);
+    if (!knowledge) {
+      return "知识";
+    }
+    const project = snapshot.projects.find((candidate) => candidate.id === knowledge.projectId);
+    return [project?.title ?? "无 Project", "知识", knowledge.title].join(" / ");
+  }
+  if (ref.kind === "report") {
+    return "周报";
+  }
+  return assertNever(ref.kind);
 }
 
 function projectOpenTaskCount(snapshot: LedgerSnapshot, projectId: string): number {
@@ -777,16 +1037,23 @@ function projectOpenTaskCount(snapshot: LedgerSnapshot, projectId: string): numb
 }
 
 function relatedEvents(snapshot: LedgerSnapshot, ref: EntityRef): LedgerEvent[] {
-  if (ref.kind === "project") {
-    return snapshot.events.filter((event) => event.projectId === ref.id);
+  switch (ref.kind) {
+    case "project":
+      return snapshot.events.filter((event) => event.projectId === ref.id);
+    case "task":
+      return snapshot.events.filter((event) => event.taskId === ref.id);
+    case "knowledge": {
+      const knowledge = snapshot.knowledge.find((item) => item.id === ref.id);
+      const sourceIds = new Set(knowledge?.sourceEventIds ?? []);
+      return snapshot.events.filter((event) => sourceIds.has(event.id));
+    }
+    case "event":
+      return snapshot.events.filter((event) => event.id === ref.id);
+    case "report":
+      return [];
+    default:
+      return assertNever(ref.kind);
   }
-  if (ref.kind === "task") {
-    return snapshot.events.filter((event) => event.taskId === ref.id);
-  }
-  if (ref.kind === "event") {
-    return snapshot.events.filter((event) => event.id === ref.id);
-  }
-  return [];
 }
 
 function formatInspectorDate(value: unknown): unknown {
@@ -819,4 +1086,184 @@ function displayUnknown(value: unknown): string {
     return value.length > 0 ? value.map(String).join(" · ") : "—";
   }
   return JSON.stringify(value);
+}
+
+function knowledgeKindLabel(value: unknown): string {
+  if (!isKnowledgeKind(value)) {
+    return "未知类型";
+  }
+  return {
+    research: "调研",
+    comparison: "比较",
+    technical_note: "技术笔记",
+    essay: "文章",
+    note: "笔记",
+  }[value];
+}
+
+function knowledgeStatusLabel(value: unknown): string {
+  if (!isKnowledgeStatus(value)) {
+    return "未知状态";
+  }
+  return {
+    draft: "草稿",
+    stable: "稳定",
+    archived: "已归档",
+  }[value];
+}
+
+function isKnowledgeKind(value: unknown): value is LedgerKnowledge["kind"] {
+  return value === "research" ||
+    value === "comparison" ||
+    value === "technical_note" ||
+    value === "essay" ||
+    value === "note";
+}
+
+function isKnowledgeStatus(value: unknown): value is LedgerKnowledge["status"] {
+  return value === "draft" || value === "stable" || value === "archived";
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function detailIds(
+  detail: Readonly<Record<string, unknown>> | null,
+  key: string,
+  allowed: ReadonlySet<string>,
+): string[] {
+  const result: string[] = [];
+  if (allowed.size === 0) {
+    return result;
+  }
+  const raw = detail?.[key];
+  if (!Array.isArray(raw)) {
+    return result;
+  }
+  const rawItems = raw as readonly unknown[];
+  const seen = new Set<string>();
+  const limit = Math.min(rawItems.length, allowed.size);
+  for (let index = 0; index < limit && result.length < allowed.size; index += 1) {
+    const id = rawItems[index];
+    if (typeof id !== "string") {
+      continue;
+    }
+    if (allowed.has(id) && !seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  }
+  return result;
+}
+
+interface SourceEventDetail {
+  id: string;
+  type: LedgerEvent["type"];
+  summary: string;
+  effectiveVisibility: "private" | "reportable";
+  occurredAt: string | null;
+  journalPath: string | null;
+}
+
+function sourceEventDetails(
+  detail: Readonly<Record<string, unknown>> | null,
+  allowed: ReadonlySet<string>,
+): ReadonlyMap<string, SourceEventDetail> {
+  const result = new Map<string, SourceEventDetail>();
+  if (allowed.size === 0 || !Array.isArray(detail?.source_events)) {
+    return result;
+  }
+  const rawDetails = detail.source_events as readonly unknown[];
+  const limit = Math.min(rawDetails.length, allowed.size);
+  for (let index = 0; index < limit && result.size < allowed.size; index += 1) {
+    const raw = rawDetails[index];
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      continue;
+    }
+    const candidate = raw as Readonly<Record<string, unknown>>;
+    if (
+      typeof candidate.id !== "string" ||
+      !allowed.has(candidate.id) ||
+      result.has(candidate.id) ||
+      !isEventType(candidate.type) ||
+      typeof candidate.summary !== "string" ||
+      (candidate.effective_visibility !== "private" && candidate.effective_visibility !== "reportable")
+    ) {
+      continue;
+    }
+    result.set(candidate.id, {
+      id: candidate.id,
+      type: candidate.type,
+      summary: candidate.summary,
+      effectiveVisibility: candidate.effective_visibility,
+      occurredAt: validTimestamp(candidate.occurred_at),
+      journalPath: validManagedJournalPath(candidate.journal_path),
+    });
+  }
+  return result;
+}
+
+function validTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (match === null) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthLengths = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year >= 1 &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= (monthLengths[month - 1] ?? 0) &&
+      hour <= 23 &&
+      minute <= 59 &&
+      second <= 59 &&
+      offsetHour <= 23 &&
+      offsetMinute <= 59
+    ? value
+    : null;
+}
+
+function validManagedJournalPath(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = /^Work\/Journal\/(\d{4})\/(\d{2})\/(\d{4})-(\d{2})-(\d{2})\.md$/.exec(value);
+  if (
+    match === null ||
+    match[1] !== match[3] ||
+    match[2] !== match[4]
+  ) {
+    return null;
+  }
+  const timestamp = validTimestamp(`${match[3]}-${match[4]}-${match[5]}T00:00:00Z`);
+  return timestamp === null ? null : value;
+}
+
+function isEventType(value: unknown): value is LedgerEvent["type"] {
+  return value === "progress" ||
+    value === "decision" ||
+    value === "blocker" ||
+    value === "result" ||
+    value === "note" ||
+    value === "idea" ||
+    value === "insight";
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported entity kind: ${String(value)}`);
 }

@@ -91,7 +91,7 @@ export function renderOverviewPage(parent: HTMLElement, context: PageContext): v
   const summary = counts(snapshot);
   parent.createDiv({
     cls: "work-ledger-status-summary",
-    text: `${summary.openTasks} 个活跃任务 · ${summary.inProgressTasks} 个进行中 · ${summary.plannedTasks} 个计划中 · ${summary.blockedTasks} 个阻塞`,
+    text: `${summary.openTasks} 个活跃任务 · ${summary.inProgressTasks} 个进行中 · ${summary.plannedTasks} 个计划中 · ${summary.blockedTasks} 个阻塞 · ${snapshot.knowledge.length} 个知识`,
   });
 }
 

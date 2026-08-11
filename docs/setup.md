@@ -8,10 +8,12 @@ Vault. It does not install the CLI, create a real Vault, or apply migrations.
 You need:
 
 - Obsidian desktop `1.12.0` or newer;
-- Python 3.11 or newer, Git, and a supported `work-ledger >=0.8,<1.0` executable;
-- CLI protocol 1 with `snapshot`, `report.export`, `read_only_snapshot`,
-  `clean_report_export`, and inherited child-project support;
-- a schema 4 Work Ledger Vault; and
+- Python 3.11 or newer, Git, and a supported `work-ledger >=0.11,<1.0` executable;
+- CLI protocol 1 with commands `snapshot`, `report.export`, `knowledge.list`, and
+  `knowledge.show`;
+- capabilities `read_only_snapshot=true`, `clean_report_export=true`,
+  `inherited_child_projects=true`, and `knowledge_documents=true`;
+- a schema 5 Work Ledger Vault; and
 - the absolute paths to the CLI executable and, when needed, its configuration.
 
 ## Install and verify Work Ledger
@@ -41,12 +43,12 @@ The complete CLI installation and artifact-verification guidance is in the
 ## Prepare the Vault
 
 The CLI configuration must resolve to the same absolute Vault that you open in
-Obsidian. The Vault must use schema 4 and pass the CLI's diagnostic checks.
+Obsidian. The Vault must use schema 5 and pass the CLI's diagnostic checks.
 
-If an existing Vault uses schema 1, 2, or 3, generate a migration plan with the
-CLI and review its paths, conflicts, and digest before applying it through the
-controlled CLI workflow. Agent Ledger can display that a migration is required,
-but it cannot apply one.
+If an existing Vault uses schema 1, 2, 3, or 4, generate a migration plan to
+schema 5 with the CLI and review its paths, conflicts, and digest before applying
+it through the controlled CLI workflow. Agent Ledger can display that a
+migration is required, but it cannot apply one.
 
 Do not experiment with setup or migration against your primary Vault. Use a
 separate synthetic Vault until the runtime and configuration have been verified.
@@ -76,8 +78,10 @@ initialization.
 ### Incompatible CLI
 
 Run `version` and `capabilities` with the configured executable. Confirm the
-version is within `>=0.8,<1.0`, protocol is 1, and the required snapshot and
-clean-report-export capabilities are present.
+version is within `>=0.11,<1.0`, protocol is 1, and the commands `snapshot`,
+`report.export`, `knowledge.list`, and `knowledge.show` are present. Confirm
+`read_only_snapshot=true`, `clean_report_export=true`,
+`inherited_child_projects=true`, and `knowledge_documents=true` as well.
 
 ### Vault mismatch
 
@@ -87,7 +91,7 @@ Vault. Business state is cleared before the mismatch is displayed.
 
 ### Migration required
 
-Use the CLI to generate and review a migration plan for schema 4. Apply only an
+Use the CLI to generate and review a migration plan to schema 5. Apply only an
 explicitly reviewed plan through the CLI; the plugin remains read-only.
 
 ### Stale data or fatal health findings
@@ -100,6 +104,9 @@ but a Vault mismatch clears business data.
 
 Through Work Ledger, Agent Ledger may inspect local Git metadata and history.
 It never performs Git mutations, fetches, pushes, synchronization,
-managed-Markdown writes, report writes, or migration apply. Project, Task,
-Event, Report, CLI stdout, and copied Agent context stay in memory rather than
-plugin settings.
+managed-Markdown writes, report writes, or migration apply. Its five-entity
+inventory is Project, Task, Knowledge, Event, and Report. Snapshot summaries,
+on-demand Inspector details, CLI stdout, and copied Agent context
+stay in memory rather than plugin settings. Knowledge create, update, archive,
+and restore remain controlled Work Ledger CLI operations; Agent Ledger does not
+expose them.

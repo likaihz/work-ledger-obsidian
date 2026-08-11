@@ -2,6 +2,9 @@ import {
   type CapabilityInfo,
   type DoctorResult,
   type EntityRef,
+  type LedgerEvent,
+  type KnowledgeKind,
+  type KnowledgeStatus,
   type LedgerSnapshot,
   type VersionInfo,
 } from "../cli/protocol";
@@ -29,6 +32,17 @@ export interface LedgerFilters {
   priorities: ReadonlySet<string>;
   statuses: ReadonlySet<string>;
   projectId: string | null;
+  timelineEventTypes: ReadonlySet<LedgerEvent["type"]>;
+  knowledge: KnowledgeFilters;
+}
+
+export interface KnowledgeFilters {
+  query: string;
+  kinds: ReadonlySet<KnowledgeKind>;
+  statuses: ReadonlySet<KnowledgeStatus>;
+  /** A Project ID, the sentinel "none", or null for every Project. */
+  projectId: string | null;
+  tag: string | null;
 }
 
 export interface LedgerState {
@@ -49,13 +63,33 @@ export interface LedgerState {
 
 type Listener = (state: LedgerState) => void;
 
-const INITIAL_FILTERS: LedgerFilters = {
-  query: "",
-  showTerminal: false,
-  priorities: new Set(),
-  statuses: new Set(),
-  projectId: null,
-};
+const ALL_TIMELINE_EVENT_TYPES: readonly LedgerEvent["type"][] = [
+  "progress",
+  "decision",
+  "blocker",
+  "result",
+  "note",
+  "idea",
+  "insight",
+];
+
+function initialFilters(): LedgerFilters {
+  return {
+    query: "",
+    showTerminal: false,
+    priorities: new Set(),
+    statuses: new Set(),
+    projectId: null,
+    timelineEventTypes: new Set(ALL_TIMELINE_EVENT_TYPES),
+    knowledge: {
+      query: "",
+      kinds: new Set(),
+      statuses: new Set(["draft", "stable"]),
+      projectId: null,
+      tag: null,
+    },
+  };
+}
 
 export class LedgerStore {
   private state: LedgerState = {
@@ -68,7 +102,7 @@ export class LedgerStore {
     snapshot: null,
     selection: null,
     selectionNotice: null,
-    filters: INITIAL_FILTERS,
+    filters: initialFilters(),
     details: new Map(),
     detailLoading: null,
     doctor: null,
@@ -106,7 +140,6 @@ export class LedgerStore {
 
   applySnapshot(snapshot: LedgerSnapshot): void {
     validateRelations(snapshot);
-    const previous = this.state.snapshot;
     let selection = this.state.selection;
     let selectionNotice: string | null = null;
     if (selection && !snapshotContains(snapshot, selection)) {
@@ -114,13 +147,10 @@ export class LedgerStore {
       selection = null;
     }
     const details = new Map(this.state.details);
-    if (previous?.digest !== snapshot.digest) {
-      for (const key of details.keys()) {
-        const [kind, id, revision] = key.split(":");
-        const currentRevision = revisionFor(snapshot, { kind: kind as EntityRef["kind"], id: id ?? "" });
-        if (revision !== currentRevision) {
-          details.delete(key);
-        }
+    const validKeys = snapshotDetailKeys(snapshot);
+    for (const key of details.keys()) {
+      if (!validKeys.has(key)) {
+        details.delete(key);
       }
     }
     this.update({
@@ -142,6 +172,30 @@ export class LedgerStore {
 
   setFilters(changes: Partial<LedgerFilters>): void {
     this.update({ filters: { ...this.state.filters, ...changes } });
+  }
+
+  setTimelineEventTypes(types: ReadonlySet<LedgerEvent["type"]>): void {
+    this.update({
+      filters: {
+        ...this.state.filters,
+        timelineEventTypes: new Set(types),
+      },
+    });
+  }
+
+  setKnowledgeFilters(changes: Partial<KnowledgeFilters>): void {
+    const knowledge: KnowledgeFilters = {
+      ...this.state.filters.knowledge,
+      ...changes,
+      ...(changes.kinds !== undefined ? { kinds: new Set(changes.kinds) } : {}),
+      ...(changes.statuses !== undefined ? { statuses: new Set(changes.statuses) } : {}),
+    };
+    this.update({
+      filters: {
+        ...this.state.filters,
+        knowledge,
+      },
+    });
   }
 
   setDetailLoading(key: string | null): void {
@@ -182,7 +236,9 @@ export class LedgerStore {
     this.update({
       snapshot: null,
       selection: null,
+      selectionNotice: null,
       details: new Map(),
+      detailLoading: null,
       doctor: null,
       migrationPlan: null,
       reportDue: null,
@@ -200,32 +256,40 @@ export function revisionFor(snapshot: LedgerSnapshot | null, ref: EntityRef): st
   if (!snapshot) {
     return null;
   }
-  if (ref.kind === "project") {
-    return snapshot.projects.find((item) => item.id === ref.id)?.revision ?? null;
+  switch (ref.kind) {
+    case "project":
+      return snapshot.projects.find((item) => item.id === ref.id)?.revision ?? null;
+    case "task":
+      return snapshot.tasks.find((item) => item.id === ref.id)?.revision ?? null;
+    case "knowledge":
+      return snapshot.knowledge.find((item) => item.id === ref.id)?.revision ?? null;
+    case "event":
+      return snapshot.events.some((item) => item.id === ref.id) ? snapshot.digest : null;
+    case "report":
+      return snapshot.reports.find((item) => `${item.isoWeek}:${item.audience}` === ref.id)?.revision ?? null;
+    default:
+      return assertNever(ref.kind);
   }
-  if (ref.kind === "task") {
-    return snapshot.tasks.find((item) => item.id === ref.id)?.revision ?? null;
-  }
-  if (ref.kind === "report") {
-    return snapshot.reports.find((item) => `${item.isoWeek}:${item.audience}` === ref.id)?.revision ?? null;
-  }
-  return snapshot.digest;
 }
 
 export function snapshotContains(snapshot: LedgerSnapshot, ref: EntityRef): boolean {
-  if (ref.kind === "project") {
-    return snapshot.projects.some((item) => item.id === ref.id);
+  switch (ref.kind) {
+    case "project":
+      return snapshot.projects.some((item) => item.id === ref.id);
+    case "task":
+      return snapshot.tasks.some((item) => item.id === ref.id);
+    case "knowledge":
+      return snapshot.knowledge.some((item) => item.id === ref.id);
+    case "event":
+      return snapshot.events.some((item) => item.id === ref.id);
+    case "report":
+      return snapshot.reports.some((item) => `${item.isoWeek}:${item.audience}` === ref.id);
+    default:
+      return assertNever(ref.kind);
   }
-  if (ref.kind === "task") {
-    return snapshot.tasks.some((item) => item.id === ref.id);
-  }
-  if (ref.kind === "event") {
-    return snapshot.events.some((item) => item.id === ref.id);
-  }
-  return snapshot.reports.some((item) => `${item.isoWeek}:${item.audience}` === ref.id);
 }
 
-function validateRelations(snapshot: LedgerSnapshot): void {
+export function validateRelations(snapshot: LedgerSnapshot): void {
   const projectIds = new Set(snapshot.projects.map((item) => item.id));
   const tasks = new Map(snapshot.tasks.map((item) => [item.id, item]));
   for (const task of snapshot.tasks) {
@@ -250,4 +314,34 @@ function validateRelations(snapshot: LedgerSnapshot): void {
       throw new Error(`Snapshot event ${event.id} references a missing task.`);
     }
   }
+  for (const knowledge of snapshot.knowledge) {
+    if (knowledge.projectId !== null && !projectIds.has(knowledge.projectId)) {
+      throw new Error(`Snapshot knowledge ${knowledge.id} references a missing project.`);
+    }
+  }
+}
+
+function snapshotDetailKeys(snapshot: LedgerSnapshot): Set<string> {
+  const keys = new Set<string>();
+  for (const project of snapshot.projects) {
+    keys.add(detailKey({ kind: "project", id: project.id }, project.revision));
+  }
+  for (const task of snapshot.tasks) {
+    keys.add(detailKey({ kind: "task", id: task.id }, task.revision));
+  }
+  for (const knowledge of snapshot.knowledge) {
+    keys.add(detailKey({ kind: "knowledge", id: knowledge.id }, knowledge.revision));
+  }
+  for (const event of snapshot.events) {
+    keys.add(detailKey({ kind: "event", id: event.id }, snapshot.digest));
+  }
+  for (const report of snapshot.reports) {
+    const id = `${report.isoWeek}:${report.audience}`;
+    keys.add(detailKey({ kind: "report", id }, report.revision));
+  }
+  return keys;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported entity kind: ${String(value)}`);
 }

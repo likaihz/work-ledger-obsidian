@@ -1,8 +1,9 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 
 import type WorkLedgerPlugin from "./main";
+import { normalizeWorkLedgerRoutes, type WorkLedgerRoute } from "./routing";
 
-export type WorkLedgerRoute = "overview" | "projects" | "timeline" | "reports" | "health";
+export type { WorkLedgerRoute } from "./routing";
 
 export interface SavedFilter {
   name: string;
@@ -29,6 +30,20 @@ export const DEFAULT_SETTINGS: WorkLedgerSettings = {
   lastRoute: "overview",
 };
 
+export function normalizeWorkLedgerSettings(
+  loaded: Partial<WorkLedgerSettings> | null,
+): WorkLedgerSettings {
+  const candidate = loaded ?? {};
+  const routes = normalizeWorkLedgerRoutes(candidate);
+  return {
+    ...DEFAULT_SETTINGS,
+    ...candidate,
+    defaultView: routes.defaultView,
+    lastRoute: routes.lastRoute,
+    savedFilters: Array.isArray(candidate.savedFilters) ? candidate.savedFilters : [],
+  };
+}
+
 export class WorkLedgerSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: WorkLedgerPlugin) {
     super(app, plugin);
@@ -43,7 +58,7 @@ export class WorkLedgerSettingTab extends PluginSettingTab {
       .setDesc("The plugin only reads through work-ledger CLI. It never writes managed Markdown or runs Git commands.");
     new Setting(containerEl)
       .setName("Work-ledger executable")
-      .setDesc("Absolute path to a compatible work-ledger CLI 0.8 or newer.")
+      .setDesc("Absolute path to a compatible work-ledger CLI >=0.11.0,<1.0.0.")
       .addText((text) => {
         text
           .setPlaceholder("/absolute/path/work-ledger")
@@ -73,6 +88,7 @@ export class WorkLedgerSettingTab extends PluginSettingTab {
           .addOptions({
             overview: "Overview",
             projects: "Projects",
+            knowledge: "Knowledge",
             timeline: "Timeline",
             reports: "Reports",
             health: "Health",

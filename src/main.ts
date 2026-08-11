@@ -2,10 +2,12 @@ import { Notice, Plugin, type TAbstractFile, type WorkspaceLeaf } from "obsidian
 
 import {
   DEFAULT_SETTINGS,
+  normalizeWorkLedgerSettings,
   WorkLedgerSettingTab,
   type WorkLedgerRoute,
   type WorkLedgerSettings,
 } from "./settings";
+import { shouldRefreshManagedPath } from "./managed-path";
 import { currentVaultIdentity } from "./obsidian/vault-identity";
 import { PLUGIN_DISPLAY_NAME } from "./plugin-identity";
 import { LedgerStore } from "./state/ledger-store";
@@ -56,7 +58,7 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
         }
       },
     });
-    for (const route of ["overview", "projects", "timeline", "reports", "health"] as WorkLedgerRoute[]) {
+    for (const route of ["overview", "projects", "knowledge", "timeline", "reports", "health"] as WorkLedgerRoute[]) {
       this.addCommand({
         id: `open-${route}`,
         name: `Open ${route[0]?.toLocaleUpperCase() ?? ""}${route.slice(1)}`,
@@ -120,16 +122,12 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
 
   private async loadSettings(): Promise<void> {
     const loaded = (await this.loadData()) as Partial<WorkLedgerSettings> | null;
-    this.settings = {
-      ...DEFAULT_SETTINGS,
-      ...(loaded ?? {}),
-      savedFilters: Array.isArray(loaded?.savedFilters) ? loaded.savedFilters : [],
-    };
+    this.settings = normalizeWorkLedgerSettings(loaded);
   }
 
   private registerVaultListeners(): void {
-    const schedule = (file: TAbstractFile) => {
-      if (isManagedPath(file.path)) {
+    const schedule = (file: TAbstractFile, previousPath?: string) => {
+      if (shouldRefreshManagedPath(file.path, previousPath)) {
         this.refreshController?.scheduleRefresh();
       }
     };
@@ -147,14 +145,4 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
     }
     return null;
   }
-}
-
-function isManagedPath(path: string): boolean {
-  return (
-    path === "Work/.work-ledger.json" ||
-    path.startsWith("Work/Projects/") ||
-    path.startsWith("Work/Tasks/") ||
-    path.startsWith("Work/Journal/") ||
-    path.startsWith("Work/Reports/")
-  );
 }

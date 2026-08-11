@@ -6,6 +6,7 @@ import { InspectorHistory } from "../../src/views/inspector-history";
 const task: EntityRef = { kind: "task", id: "task-001" };
 const parent: EntityRef = { kind: "task", id: "task-002" };
 const project: EntityRef = { kind: "project", id: "project-001" };
+const missingEvent: EntityRef = { kind: "event", id: "event-missing" };
 
 describe("InspectorHistory", () => {
   it("returns through Inspector-only relation navigation", () => {
@@ -20,11 +21,14 @@ describe("InspectorHistory", () => {
 
   it("ignores same-entity navigation and unavailable history entries", () => {
     const history = new InspectorHistory();
-    history.push(task, task);
+    expect(history.push(task, task, () => true)).toBe(false);
     expect(history.canGoBack).toBe(false);
 
-    history.push(task, parent);
-    history.push(parent, project);
+    expect(history.push(task, missingEvent, () => false)).toBe(false);
+    expect(history.canGoBack).toBe(false);
+
+    expect(history.push(task, parent, () => true)).toBe(true);
+    expect(history.push(parent, project, () => true)).toBe(true);
     expect(history.back((ref) => ref.id === task.id)).toEqual(task);
     expect(history.canGoBack).toBe(false);
   });

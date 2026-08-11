@@ -2,7 +2,9 @@ export type ProjectStatus = "active" | "archived";
 export type TaskStatus = "inbox" | "planned" | "in_progress" | "blocked" | "done" | "cancelled";
 export type Priority = "P0" | "P1" | "P2" | "P3";
 export type Visibility = "private" | "reportable";
-export type EntityKind = "project" | "task" | "event" | "report";
+export type KnowledgeKind = "research" | "comparison" | "technical_note" | "essay" | "note";
+export type KnowledgeStatus = "draft" | "stable" | "archived";
+export type EntityKind = "project" | "task" | "knowledge" | "event" | "report";
 
 export interface VersionInfo {
   product: string;
@@ -63,13 +65,31 @@ export interface LedgerEvent {
   occurredAt: string;
   recordedAt: string;
   timePrecision: "exact" | "date";
-  type: "progress" | "decision" | "blocker" | "result" | "note";
+  type: "progress" | "decision" | "blocker" | "result" | "note" | "idea" | "insight";
   projectId: string;
   taskId: string | null;
   summary: string;
   visibility: Visibility;
   effectiveVisibility: Visibility;
   source: string;
+}
+
+export interface LedgerKnowledge {
+  id: string;
+  title: string;
+  slug: string;
+  path: string;
+  wikilink: string;
+  kind: KnowledgeKind;
+  status: KnowledgeStatus;
+  projectId: string | null;
+  sourceEventIds: string[];
+  visibility: Visibility;
+  effectiveVisibility: Visibility;
+  createdAt: string;
+  updatedAt: string;
+  tags: string[];
+  revision: string;
 }
 
 export interface LedgerReport {
@@ -109,6 +129,7 @@ export interface LedgerSnapshot {
   projects: LedgerProject[];
   tasks: LedgerTask[];
   events: LedgerEvent[];
+  knowledge: LedgerKnowledge[];
   reports: LedgerReport[];
   eventWindow: {
     from: string;
@@ -204,8 +225,44 @@ function digest(value: unknown, label: string): string {
 
 function timestamp(value: unknown, label: string): string {
   const result = string(value, label);
-  if (Number.isNaN(Date.parse(result))) {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/.exec(
+      result,
+    );
+  if (match === null) {
     throw new ProtocolError(`${label} must be an RFC 3339 timestamp.`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthLengths = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (
+    year < 1 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > (monthLengths[month - 1] ?? 0) ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
+  ) {
+    throw new ProtocolError(`${label} must be an RFC 3339 timestamp.`);
+  }
+  return result;
+}
+
+function eventIdentifier(value: unknown, label: string): string {
+  const result = string(value, label);
+  if (!/^event-\d{8}-\d{6}-\d{3}$/.test(result)) {
+    throw new ProtocolError(`${label} must be an Event ID.`);
   }
   return result;
 }
@@ -352,6 +409,8 @@ function decodeEvent(value: unknown, index: number): LedgerEvent {
       "blocker",
       "result",
       "note",
+      "idea",
+      "insight",
     ]),
     projectId: string(item.project_id, `events[${index}].project_id`),
     taskId: optionalString(item.task_id, `events[${index}].task_id`),
@@ -363,6 +422,52 @@ function decodeEvent(value: unknown, index: number): LedgerEvent {
       ["private", "reportable"],
     ),
     source: string(item.source, `events[${index}].source`),
+  };
+}
+
+function decodeKnowledge(value: unknown, index: number): LedgerKnowledge {
+  const item = record(value, `knowledge[${index}]`);
+  if ("body" in item) {
+    throw new ProtocolError(`knowledge[${index}] must not contain body.`);
+  }
+  return {
+    id: string(item.id, `knowledge[${index}].id`),
+    title: string(item.title, `knowledge[${index}].title`),
+    slug: string(item.slug, `knowledge[${index}].slug`),
+    path: relativePath(item.path, `knowledge[${index}].path`),
+    wikilink: string(item.wikilink, `knowledge[${index}].wikilink`),
+    kind: enumValue(item.kind, `knowledge[${index}].kind`, [
+      "research",
+      "comparison",
+      "technical_note",
+      "essay",
+      "note",
+    ]),
+    status: enumValue(item.status, `knowledge[${index}].status`, [
+      "draft",
+      "stable",
+      "archived",
+    ]),
+    projectId: optionalString(item.project_id, `knowledge[${index}].project_id`),
+    sourceEventIds: array(
+      item.source_event_ids,
+      `knowledge[${index}].source_event_ids`,
+    ).map((sourceId, sourceIndex) =>
+      eventIdentifier(sourceId, `knowledge[${index}].source_event_ids[${sourceIndex}]`),
+    ),
+    visibility: enumValue(item.visibility, `knowledge[${index}].visibility`, [
+      "private",
+      "reportable",
+    ]),
+    effectiveVisibility: enumValue(
+      item.effective_visibility,
+      `knowledge[${index}].effective_visibility`,
+      ["private", "reportable"],
+    ),
+    createdAt: timestamp(item.created_at, `knowledge[${index}].created_at`),
+    updatedAt: timestamp(item.updated_at, `knowledge[${index}].updated_at`),
+    tags: strings(item.tags, `knowledge[${index}].tags`),
+    revision: digest(item.revision, `knowledge[${index}].revision`),
   };
 }
 
@@ -395,6 +500,7 @@ export function decodeSnapshot(value: unknown): LedgerSnapshot {
   const projects = array(data.projects, "snapshot.projects").map(decodeProject);
   const tasks = array(data.tasks, "snapshot.tasks").map(decodeTask);
   const events = array(data.events, "snapshot.events").map(decodeEvent);
+  const knowledge = array(data.knowledge, "snapshot.knowledge").map(decodeKnowledge);
   const reports = array(data.reports, "snapshot.reports").map(decodeReport);
   return {
     schemaVersion: 1,
@@ -411,6 +517,7 @@ export function decodeSnapshot(value: unknown): LedgerSnapshot {
     projects,
     tasks,
     events,
+    knowledge,
     reports,
     eventWindow: {
       from: timestamp(eventWindow.from, "snapshot.event_window.from"),

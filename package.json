@@ -1,6 +1,6 @@
 {
   "name": "agent-ledger-obsidian",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Read-only Agent Ledger visualization of Work Ledger data in Obsidian",
   "main": "main.js",
   "type": "module",
@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "verify": "npm run lint && npm run test && npm run package"
+    "verify": "npm run lint && npm run package && npm run test"
   },
   "keywords": [
     "obsidian",

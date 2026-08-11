@@ -1,7 +1,12 @@
 import { setIcon } from "obsidian";
 
-import type { LedgerEvent, LedgerProject } from "../../cli/protocol";
-import { projectTasks, taskTree, type TaskTreeNode } from "../../state/selectors";
+import type { LedgerEvent, LedgerKnowledge, LedgerProject } from "../../cli/protocol";
+import {
+  knowledgeForProject,
+  projectTasks,
+  taskTree,
+  type TaskTreeNode,
+} from "../../state/selectors";
 import {
   badge,
   emptyState,
@@ -61,12 +66,14 @@ export function renderProjectsPage(parent: HTMLElement, context: PageContext): v
   const recentProjectEvents = snapshot.events
     .filter((event) => event.projectId === selectedProject.id)
     .slice(0, 5);
+  const projectKnowledge = knowledgeForProject(snapshot, selectedProject.id);
 
   const summary = parent.createDiv({ cls: "work-ledger-project-summary" });
   summaryItem(summary, "活跃任务", String(activeTasks.length));
   summaryItem(summary, "阻塞", String(blockedTasks.length), blockedTasks.length > 0 ? "is-danger" : "");
   summaryItem(summary, "最近工作", recentProjectEvents[0] ? formatShortDate(recentProjectEvents[0].occurredAt) : "—");
   summaryItem(summary, "标签", selectedProject.tags.length > 0 ? selectedProject.tags.join(" · ") : "—");
+  summaryItem(summary, "知识", String(projectKnowledge.length));
 
   sectionTitle(parent, "任务层级", filters.showTerminal ? `${tasks.length} 项（含终态）` : `${activeTasks.length} 个活跃任务`);
   const projectTree = taskTree(snapshot, filters.showTerminal).find(
@@ -85,6 +92,16 @@ export function renderProjectsPage(parent: HTMLElement, context: PageContext): v
     }
   }
 
+  sectionTitle(parent, "关联知识", `${projectKnowledge.length} 项`);
+  const knowledgeList = parent.createDiv({ cls: "work-ledger-project-knowledge" });
+  if (projectKnowledge.length === 0) {
+    emptyState(knowledgeList, "暂无关联知识", "该项目还没有关联的 Knowledge 文档。", "library-big");
+  } else {
+    for (const knowledge of projectKnowledge) {
+      renderProjectKnowledge(knowledgeList, knowledge, context);
+    }
+  }
+
   sectionTitle(parent, "最近工作", recentProjectEvents.length > 0 ? `最近 ${recentProjectEvents.length} 条` : undefined);
   const events = parent.createDiv({ cls: "work-ledger-project-events" });
   if (recentProjectEvents.length === 0) {
@@ -94,6 +111,29 @@ export function renderProjectsPage(parent: HTMLElement, context: PageContext): v
       renderProjectEvent(events, event, context);
     }
   }
+}
+
+function renderProjectKnowledge(
+  parent: HTMLElement,
+  knowledge: LedgerKnowledge,
+  context: PageContext,
+): void {
+  const row = parent.createEl("button", {
+    cls: "work-ledger-project-knowledge-row",
+    attr: { "aria-label": `查看关联知识：${knowledge.title}` },
+  });
+  row.addEventListener("click", () => {
+    context.actions.select({ kind: "knowledge", id: knowledge.id });
+  });
+  const copy = row.createSpan({ cls: "work-ledger-project-knowledge-copy" });
+  copy.createSpan({ text: knowledge.title, cls: "work-ledger-project-knowledge-title" });
+  copy.createSpan({
+    text: knowledge.tags.length > 0 ? knowledge.tags.map((tag) => `#${tag}`).join(" · ") : "无标签",
+    cls: "work-ledger-muted",
+  });
+  badge(row.createSpan(), knowledge.kind, knowledge.kind);
+  badge(row.createSpan(), knowledge.status, knowledge.status);
+  row.createSpan({ text: `${knowledge.sourceEventIds.length} 个来源`, cls: "work-ledger-muted" });
 }
 
 function renderProjectIndex(parent: HTMLElement, context: PageContext): void {

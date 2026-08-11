@@ -1,6 +1,6 @@
 # Agent Ledger for Obsidian
 
-See agent-assisted work clearly—projects, evidence, and weekly reports—in the
+See agent-assisted work clearly—projects, knowledge, evidence, and weekly reports—in the
 Obsidian Vault you already use.
 
 Agent Ledger reads through Work Ledger and never edits managed Markdown.
@@ -29,8 +29,12 @@ desktop workspace where you can:
   projects.
 - **Projects** makes root tasks and inherited child-task structure readable at
   a glance.
+- **Knowledge** lists draft and stable documents by default, with independent
+  kind, status, Project, and tag filters. Knowledge Inspector shows the
+  read-only body, effective visibility, source Events, history, and native-note
+  actions; archived documents remain available through the status filter.
 - **Timeline** turns corrected and compensated Journal entries into a clean,
-  date-grouped history.
+  date-grouped history, including `idea` (灵感) and `insight` (洞察).
 - **Reports** shows due status, report history, evidence facts, and clean
   Markdown or plain-text copy actions.
 - **Health** explains CLI, protocol, schema, Vault, digest, Git HEAD, and doctor
@@ -42,7 +46,7 @@ desktop workspace where you can:
    search for **Agent Ledger**, then install and enable it. You can also use the
    [Community Plugins link](obsidian://show-plugin?id=agent-ledger).
 2. Install an exact compatible `agent-ledger-harness` release that provides
-   `work-ledger >=0.8,<1.0`, and prepare a schema 4 Work Ledger Vault. See the
+   `work-ledger >=0.11,<1.0`, and prepare a schema 5 Work Ledger Vault. See the
    [setup guide](docs/setup.md) for supported installation and migration paths.
 3. Open that same Vault in Obsidian. In **Settings → Agent Ledger**, enter the
    absolute path to the verified `work-ledger` executable. Add an absolute
@@ -57,7 +61,7 @@ desktop workspace where you can:
 
 Agent Ledger asks the compatible `work-ledger` CLI for deterministic read
 projections, then renders them inside Obsidian. Work Ledger remains the only
-writer for managed Project, Task, Journal, and Report Markdown, so the plugin
+writer for managed Project, Task, Knowledge, Journal, and Report Markdown, so the plugin
 does not introduce a second source of truth.
 
 The open Obsidian Vault and the configured CLI Vault must have the same
@@ -71,7 +75,7 @@ before showing the error so information from another Vault is never displayed.
   fetches, pushes, `sync`, `apply`, `migrate apply`, or
   `report write`, and it never writes managed Markdown directly.
 - Settings persist runtime location and UI preferences, not Project, Task,
-  Event, Report, CLI stdout, or Agent-context snapshots.
+  Knowledge, Event, Report, CLI stdout, or Agent-context snapshots.
 - **Copy Agent context** copies a scoped, read-only context block to your
   clipboard. It does not send anything to an agent automatically.
 - Report export is a clean, read-only projection; migration support is limited
@@ -82,13 +86,14 @@ before showing the error so information from another Vault is never displayed.
 | Requirement | Supported boundary |
 |---|---|
 | Obsidian | Desktop `1.12.0` or newer |
-| Work Ledger | `work-ledger >=0.8,<1.0`, CLI protocol 1 |
+| Work Ledger | `work-ledger >=0.11,<1.0`, CLI protocol 1 |
 | Vault | The same absolute Vault in the CLI and Obsidian |
-| Data | Work Ledger Vault schema 4 |
+| Data | Work Ledger Vault schema 5 |
+| Knowledge capability | `knowledge_documents=true`, `knowledge.list`, and `knowledge.show` |
 
 To keep the public names distinct, install the `agent-ledger-harness` distribution
 to provide the `work-ledger` executable for the
-`work-ledger-cli >=0.8.0,<1.0.0` product. The sibling `work-ledger-cli` source tree
+`work-ledger-cli >=0.11.0,<1.0.0` product. The sibling `work-ledger-cli` source tree
 is only an automatic development fallback inside the monorepo.
 
 The plugin does not install the CLI, initialize a real Vault, or apply a Vault
@@ -99,7 +104,7 @@ migration. Follow the [setup guide](docs/setup.md) for those steps.
 | What you see | What to do |
 |---|---|
 | **CLI missing** | Enter the absolute path to a verified `work-ledger` executable. Desktop apps do not reliably inherit your interactive shell `PATH`. |
-| **Incompatible** | Install a compatible CLI and confirm protocol 1 exposes `snapshot`, `report.export`, `read_only_snapshot`, `clean_report_export`, and inherited child projects. |
+| **Incompatible** | Install a compatible CLI and confirm protocol 1 exposes `snapshot`, `report.export`, `knowledge.list`, `knowledge.show`, `read_only_snapshot`, `clean_report_export`, `knowledge_documents`, and inherited child projects. |
 | **Vault mismatch** | Open the Vault selected by the CLI configuration, or select the configuration for the Vault currently open in Obsidian. |
 | **Migration required** | Generate and review a CLI migration plan. Agent Ledger never applies it. |
 | **Stale** | Review Health, fix the reported runtime or data issue, then refresh manually. |
@@ -115,12 +120,25 @@ No. It requires Obsidian desktop because it launches a local CLI executable.
 ### Why is there no separate Graph page?
 
 Managed wikilinks already work with Obsidian's native Graph and backlinks.
-Agent Ledger focuses on project, timeline, report, and health views.
+Agent Ledger focuses on project, Knowledge, timeline, report, and health views.
+
+### Why does Agent Ledger search not match Knowledge body text?
+
+Plugin search deliberately indexes only Snapshot metadata: Knowledge title,
+slug, tags, and ID. Use Obsidian 原生全文搜索 for body text; this keeps bodies
+out of the Snapshot and avoids a second index with different privacy or
+freshness semantics.
 
 ### Can the plugin change my Work Ledger data?
 
 No. Agent Ledger is a read-only client. Use the Work Ledger CLI for controlled
 writes, synchronization, report generation, and reviewed migrations.
+
+### Can Agent Ledger create or update Knowledge?
+
+No. Knowledge create, update, archive, and restore operations belong to the
+Work Ledger CLI (normally through the `knowledge-base` workflow). Agent Ledger
+only reads `knowledge.list`, `knowledge.show`, and schema 5 Snapshot data.
 
 ### Does copying Agent context send it anywhere?
 

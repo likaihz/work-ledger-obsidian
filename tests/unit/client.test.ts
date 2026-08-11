@@ -24,9 +24,13 @@ afterEach(() => {
 });
 
 describe("ledger CLI process boundary", () => {
-  it("requires the clean-export CLI generation", () => {
-    expect(isCompatibleCliVersion("0.7.9")).toBe(false);
-    expect(isCompatibleCliVersion("0.8.0")).toBe(true);
+  it("requires the Knowledge-capable CLI generation", () => {
+    expect(isCompatibleCliVersion("0.10.9")).toBe(false);
+    expect(isCompatibleCliVersion("0.11.0")).toBe(true);
+    expect(isCompatibleCliVersion("0.99.0")).toBe(true);
+    expect(isCompatibleCliVersion("0.11.0-alpha")).toBe(false);
+    expect(isCompatibleCliVersion("0.11.0garbage")).toBe(false);
+    expect(isCompatibleCliVersion("0.11.0+metadata")).toBe(false);
     expect(isCompatibleCliVersion("1.0.0")).toBe(false);
   });
 
@@ -110,6 +114,68 @@ describe("ledger CLI process boundary", () => {
       audience: "reportable",
       content: "# 本周成果\n",
       exportDigest,
+    });
+  });
+
+  it("loads Knowledge detail with only the documented arguments", async () => {
+    const payload = JSON.stringify({
+      ok: true,
+      data: {
+        id: "knowledge-20260810-001",
+        body: "Protocol notes",
+      },
+      warnings: [],
+    });
+    const script = executable(
+      `test "$*" = "knowledge show --id knowledge-20260810-001" || exit 9\nprintf '%s\\n' '${payload}'`,
+    );
+    const client = new LedgerCliClient({ executablePath: script });
+
+    await expect(client.knowledgeShow("knowledge-20260810-001")).resolves.toEqual({
+      id: "knowledge-20260810-001",
+      body: "Protocol notes",
+    });
+  });
+
+  it("cancels a Knowledge detail process through its AbortSignal", async () => {
+    const script = executable(`sleep 1\nprintf '%s\\n' '{"ok":true,"data":{}}'`);
+    const client = new LedgerCliClient({ executablePath: script });
+    const controller = new AbortController();
+
+    const request = client.knowledgeShow("knowledge-20260810-001", controller.signal);
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ kind: "cancelled" });
+  });
+
+  it("times out a hung Knowledge detail process", async () => {
+    const script = executable(`sleep 1\nprintf '%s\\n' '{"ok":true,"data":{}}'`);
+    const client = new LedgerCliClient({ executablePath: script, timeoutMs: 10 });
+
+    await expect(client.knowledgeShow("knowledge-20260810-001")).rejects.toMatchObject({
+      kind: "timeout",
+    });
+  });
+
+  it("preserves a structured CLI error from Knowledge show", async () => {
+    const script = executable(
+      `printf '%s\\n' '{"ok":false,"error":{"code":"NOT_FOUND","message":"Missing Knowledge","details":{"id":"knowledge-missing"}}}'`,
+    );
+    const client = new LedgerCliClient({ executablePath: script });
+
+    await expect(client.knowledgeShow("knowledge-missing")).rejects.toMatchObject({
+      kind: "cli",
+      code: "NOT_FOUND",
+      details: { id: "knowledge-missing" },
+    });
+  });
+
+  it("rejects non-JSON Knowledge show output", async () => {
+    const script = executable("printf 'not-json\\n'");
+    const client = new LedgerCliClient({ executablePath: script });
+
+    await expect(client.knowledgeShow("knowledge-20260810-001")).rejects.toMatchObject({
+      kind: "output",
     });
   });
 });

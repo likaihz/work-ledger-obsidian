@@ -1,10 +1,11 @@
 import {
   type LedgerEvent,
+  type LedgerKnowledge,
   type LedgerProject,
   type LedgerSnapshot,
   type LedgerTask,
 } from "../cli/protocol";
-import type { LedgerFilters } from "./ledger-store";
+import type { KnowledgeFilters, LedgerFilters } from "./ledger-store";
 
 export interface TaskTreeNode {
   task: LedgerTask;
@@ -83,11 +84,14 @@ export function recentEvents(
   snapshot: LedgerSnapshot,
   limit = 5,
 ): LedgerEvent[] {
-  const cutoff = new Date(snapshot.generatedAt);
-  cutoff.setDate(cutoff.getDate() - 7);
+  const windowEnd = Date.parse(snapshot.eventWindow.to);
+  const cutoff = windowEnd - 7 * 24 * 60 * 60 * 1000;
   return snapshot.events
-    .filter((event) => new Date(event.occurredAt).getTime() >= cutoff.getTime())
-    .slice(0, limit);
+    .filter((event) => {
+      const occurredAt = Date.parse(event.occurredAt);
+      return occurredAt >= cutoff && occurredAt < windowEnd;
+    })
+    .slice(0, Math.max(0, limit));
 }
 
 export function projectTasks(snapshot: LedgerSnapshot, projectId: string, showTerminal: boolean): LedgerTask[] {
@@ -99,7 +103,7 @@ export function projectTasks(snapshot: LedgerSnapshot, projectId: string, showTe
 }
 
 export interface SearchResult {
-  kind: "project" | "task" | "event" | "report";
+  kind: "project" | "task" | "knowledge" | "event" | "report";
   id: string;
   title: string;
   secondary: string;
@@ -110,15 +114,24 @@ export function search(snapshot: LedgerSnapshot, rawQuery: string, limit = 30): 
   if (!query) {
     return [];
   }
-  const results: SearchResult[] = [];
+  const projectResults: SearchResult[] = [];
+  const taskResults: SearchResult[] = [];
+  const knowledgeResults: SearchResult[] = [];
+  const eventResults: SearchResult[] = [];
+  const reportResults: SearchResult[] = [];
   for (const project of snapshot.projects) {
     if (normalize(`${project.title} ${project.id} ${project.tags.join(" ")}`).includes(query)) {
-      results.push({ kind: "project", id: project.id, title: project.title, secondary: project.status });
+      projectResults.push({
+        kind: "project",
+        id: project.id,
+        title: project.title,
+        secondary: project.status,
+      });
     }
   }
   for (const task of snapshot.tasks) {
     if (normalize(`${task.title} ${task.id} ${task.tags.join(" ")}`).includes(query)) {
-      results.push({
+      taskResults.push({
         kind: "task",
         id: task.id,
         title: task.title,
@@ -126,9 +139,23 @@ export function search(snapshot: LedgerSnapshot, rawQuery: string, limit = 30): 
       });
     }
   }
+  for (const knowledge of snapshot.knowledge) {
+    if (
+      normalize(
+        `${knowledge.title} ${knowledge.slug} ${knowledge.id} ${knowledge.tags.join(" ")}`,
+      ).includes(query)
+    ) {
+      knowledgeResults.push({
+        kind: "knowledge",
+        id: knowledge.id,
+        title: knowledge.title,
+        secondary: `${knowledge.kind} · ${knowledge.status}`,
+      });
+    }
+  }
   for (const event of snapshot.events) {
     if (normalize(`${event.summary} ${event.id} ${event.type}`).includes(query)) {
-      results.push({
+      eventResults.push({
         kind: "event",
         id: event.id,
         title: event.summary,
@@ -138,7 +165,7 @@ export function search(snapshot: LedgerSnapshot, rawQuery: string, limit = 30): 
   }
   for (const report of snapshot.reports) {
     if (normalize(`${report.isoWeek} ${report.audience}`).includes(query)) {
-      results.push({
+      reportResults.push({
         kind: "report",
         id: `${report.isoWeek}:${report.audience}`,
         title: `${report.isoWeek} · ${report.audience}`,
@@ -146,7 +173,53 @@ export function search(snapshot: LedgerSnapshot, rawQuery: string, limit = 30): 
       });
     }
   }
-  return results.slice(0, limit);
+  return [projectResults, taskResults, knowledgeResults, eventResults, reportResults]
+    .flatMap((group) => group.sort(compareSearchResults))
+    .slice(0, Math.max(0, limit));
+}
+
+export function filterKnowledge(
+  knowledge: readonly LedgerKnowledge[],
+  filters: KnowledgeFilters,
+): LedgerKnowledge[] {
+  const query = normalize(filters.query);
+  const tag = filters.tag === null ? null : normalize(filters.tag);
+  return [...knowledge]
+    .filter((item) => {
+      if (filters.kinds.size > 0 && !filters.kinds.has(item.kind)) {
+        return false;
+      }
+      if (filters.statuses.size > 0 && !filters.statuses.has(item.status)) {
+        return false;
+      }
+      if (filters.projectId === "none" && item.projectId !== null) {
+        return false;
+      }
+      if (
+        filters.projectId !== null &&
+        filters.projectId !== "none" &&
+        item.projectId !== filters.projectId
+      ) {
+        return false;
+      }
+      if (tag !== null && !item.tags.some((itemTag) => normalize(itemTag) === tag)) {
+        return false;
+      }
+      return (
+        !query ||
+        normalize(`${item.title} ${item.slug} ${item.id} ${item.tags.join(" ")}`).includes(query)
+      );
+    })
+    .sort(compareKnowledge);
+}
+
+export function knowledgeForProject(
+  snapshot: LedgerSnapshot,
+  projectId: string,
+): LedgerKnowledge[] {
+  return snapshot.knowledge
+    .filter((item) => item.projectId === projectId)
+    .sort(compareKnowledge);
 }
 
 export function filterTasks(tasks: LedgerTask[], filters: LedgerFilters): LedgerTask[] {
@@ -245,4 +318,17 @@ function compareFocus(left: LedgerTask, right: LedgerTask, today: string): numbe
     }
   }
   return left.title.localeCompare(right.title, "zh-CN");
+}
+
+function compareKnowledge(left: LedgerKnowledge, right: LedgerKnowledge): number {
+  return (
+    Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+    Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
+    right.id.localeCompare(left.id)
+  );
+}
+
+function compareSearchResults(left: SearchResult, right: SearchResult): number {
+  return normalize(left.title).localeCompare(normalize(right.title), "zh-CN") ||
+    left.id.localeCompare(right.id);
 }

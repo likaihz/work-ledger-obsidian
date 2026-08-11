@@ -129,6 +129,8 @@ export function eventTypeLabel(type: LedgerEvent["type"]): string {
     blocker: "阻塞",
     result: "结果",
     note: "备注",
+    idea: "灵感",
+    insight: "洞察",
   }[type];
 }
 
@@ -139,5 +141,7 @@ export function eventIcon(type: LedgerEvent["type"]): string {
     blocker: "octagon-alert",
     result: "circle-check",
     note: "sticky-note",
+    idea: "lightbulb",
+    insight: "scan-eye",
   }[type];
 }

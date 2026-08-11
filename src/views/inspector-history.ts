@@ -11,14 +11,19 @@ export class InspectorHistory {
     return this.entries.length > 0;
   }
 
-  push(current: EntityRef, next: EntityRef): void {
-    if (sameEntity(current, next)) {
-      return;
+  push(
+    current: EntityRef,
+    next: EntityRef,
+    isAvailable: (ref: EntityRef) => boolean = () => true,
+  ): boolean {
+    if (sameEntity(current, next) || !isAvailable(next)) {
+      return false;
     }
     this.entries.push(current);
     if (this.entries.length > this.limit) {
       this.entries.splice(0, this.entries.length - this.limit);
     }
+    return true;
   }
 
   back(isAvailable: (ref: EntityRef) => boolean): EntityRef | null {
