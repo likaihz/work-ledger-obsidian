@@ -468,7 +468,7 @@ describe("real work-ledger CLI contract", () => {
 
     const version = decodeVersion(run(root, ["version"]));
     const capabilities = decodeCapabilities(run(root, ["capabilities"]));
-    expect(version.cliVersion).toBe("0.10.0");
+    expect(version.cliVersion).toBe(capabilities.cliVersion);
     expect(capabilities.commands.has("snapshot")).toBe(true);
     expect(capabilities.commands.has("report.export")).toBe(true);
     expect(capabilities.features.read_only_snapshot).toBe(true);
