@@ -32,6 +32,12 @@
   box-sizing: border-box;
 }
 
+.work-ledger-root,
+.work-ledger-root * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
 .work-ledger-topbar {
   align-items: center;
   background: color-mix(in srgb, var(--wl-bg) 94%, transparent);

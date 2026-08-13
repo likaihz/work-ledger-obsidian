@@ -96,6 +96,28 @@ export class WorkLedgerView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.unsubscribe = this.host.store.subscribe((state) => this.render(state));
+    const preserveTextSelection = (event: MouseEvent): void => {
+      const selection = this.contentEl.ownerDocument.getSelection();
+      const target = event.target;
+      if (
+        event.detail > 0 &&
+        selection &&
+        !selection.isCollapsed &&
+        selection.anchorNode &&
+        selection.focusNode &&
+        target instanceof Node &&
+        this.contentEl.contains(selection.anchorNode) &&
+        this.contentEl.contains(selection.focusNode) &&
+        Array.from({ length: selection.rangeCount }, (_, index) =>
+          selection.getRangeAt(index),
+        ).some((range) => range.intersectsNode(target))
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    this.registerDomEvent(this.contentEl, "click", preserveTextSelection, { capture: true });
+    this.registerDomEvent(this.contentEl, "dblclick", preserveTextSelection, { capture: true });
     this.registerDomEvent(this.containerEl, "keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();

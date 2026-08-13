@@ -36,8 +36,9 @@ vi.mock("obsidian", () => {
       target: HTMLElement,
       type: string,
       listener: EventListener,
+      options?: boolean | AddEventListenerOptions,
     ): void {
-      target.addEventListener(type, listener);
+      target.addEventListener(type, listener, options);
     }
   }
 
@@ -235,6 +236,60 @@ function knowledgePageContext(items: LedgerKnowledge[]): {
   return { context: { state: store.get(), actions }, select, openPath };
 }
 
+async function openKnowledgeView(item: LedgerKnowledge): Promise<{
+  view: WorkLedgerView;
+  store: LedgerStore;
+  loadDetail: ReturnType<typeof vi.fn>;
+  getAbstractFileByPath: ReturnType<typeof vi.fn>;
+  saveRoute: ReturnType<typeof vi.fn>;
+}> {
+  const store = new LedgerStore();
+  store.applySnapshot(snapshot([item]));
+  const loadDetail = vi.fn(async (): Promise<void> => undefined);
+  const getAbstractFileByPath = vi.fn(() => null);
+  const app = {
+    metadataCache: { resolvedLinks: {} },
+    vault: { getAbstractFileByPath },
+    workspace: {
+      getActiveViewOfType: vi.fn(() => null),
+      getLeaf: vi.fn(() => ({ openFile: vi.fn() })),
+    },
+  };
+  const saveRoute = vi.fn(async (): Promise<void> => undefined);
+  const host = {
+    app,
+    store,
+    settings: {
+      executablePath: "",
+      defaultView: "knowledge",
+      eventLookbackDays: 35,
+      savedFilters: [],
+      lastRoute: "knowledge",
+    },
+    controller: () => ({ loadDetail }),
+    saveRoute,
+  } as unknown as WorkLedgerViewHost;
+  const view = new WorkLedgerView({ app } as never, host);
+  await view.onOpen();
+  return { view, store, loadDetail, getAbstractFileByPath, saveRoute };
+}
+
+function selectKnowledgeTitle(view: WorkLedgerView): {
+  card: HTMLButtonElement;
+  selection: Selection;
+} {
+  const card = view.contentEl.querySelector<HTMLButtonElement>(
+    '[data-knowledge-id="knowledge-stable"]',
+  )!;
+  const title = card.querySelector<HTMLElement>(".work-ledger-knowledge-title")!;
+  const range = document.createRange();
+  range.selectNodeContents(title);
+  const selection = document.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return { card, selection };
+}
+
 const DOM_EXTENSION_NAMES = [
   "createEl",
   "createDiv",
@@ -409,6 +464,56 @@ describe("selected Work Ledger visual contract", () => {
     expect(styles).toMatch(
       /\.work-ledger-overview-event-day\s*\{[^}]*background: var\(--wl-bg\);[^}]*font-weight: 600;/s,
     );
+  });
+
+  it("overrides host selection locks throughout the plugin view", () => {
+    const styles = readFileSync(path.join(packageRoot, "styles.css"), "utf8");
+    expect(styles).toMatch(
+      /\.work-ledger-root,\s*\.work-ledger-root \*\s*\{[^}]*-webkit-user-select: text !important;[^}]*user-select: text !important;/s,
+    );
+  });
+
+  it("preserves a text range instead of activating its clickable row", async () => {
+    const item = knowledge("stable");
+    const { view, store, loadDetail } = await openKnowledgeView(item);
+    const { card, selection } = selectKnowledgeTitle(view);
+
+    card.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+
+    expect(selection.toString()).toBe(item.title);
+    expect(store.get().selection).toBeNull();
+    expect(loadDetail).not.toHaveBeenCalled();
+    selection.removeAllRanges();
+    await view.onClose();
+  });
+
+  it("does not open a clickable row when double-click selects its text", async () => {
+    const item = knowledge("stable");
+    const { view, getAbstractFileByPath } = await openKnowledgeView(item);
+    const { card, selection } = selectKnowledgeTitle(view);
+
+    card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+
+    expect(selection.toString()).toBe(item.title);
+    expect(getAbstractFileByPath).not.toHaveBeenCalled();
+    selection.removeAllRanges();
+    await view.onClose();
+  });
+
+  it("allows unrelated controls while another text range remains selected", async () => {
+    const item = knowledge("stable");
+    const { view, saveRoute } = await openKnowledgeView(item);
+    const { selection } = selectKnowledgeTitle(view);
+    const projectsNav = view.contentEl.querySelector<HTMLButtonElement>(
+      'button[aria-label="项目"]',
+    )!;
+
+    projectsNav.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    await Promise.resolve();
+
+    expect(saveRoute).toHaveBeenCalledWith("projects");
+    selection.removeAllRanges();
+    await view.onClose();
   });
 
   it("keeps Overview focus headers and data on the same grid tracks", () => {
