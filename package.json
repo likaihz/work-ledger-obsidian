@@ -1,6 +1,6 @@
 {
   "name": "agent-ledger-obsidian",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Read-only Agent Ledger visualization of Work Ledger data in Obsidian",
   "main": "main.js",
   "type": "module",
@@ -14,7 +14,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "verify": "npm run lint && npm run package && npm run test"
+    "verify": "npm run lint && npm run package && npm run test",
+    "local:setup": "node tools/local-e2e.mjs setup",
+    "local:install-package": "node tools/local-e2e.mjs install-package",
+    "local:verify": "node tools/local-e2e.mjs verify"
   },
   "keywords": [
     "obsidian",

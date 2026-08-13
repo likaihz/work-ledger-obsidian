@@ -1289,6 +1289,73 @@ describe("selected Work Ledger visual contract", () => {
     );
   });
 
+  it("neutralizes Obsidian button chrome for Knowledge controls", () => {
+    const styles = readFileSync(path.join(packageRoot, "styles.css"), "utf8");
+    expect(styles).toMatch(
+      /\.work-ledger-root button\.work-ledger-knowledge-filter-toggle\s*\{[^}]*appearance: none !important;[^}]*background-color: transparent !important;[^}]*box-shadow: none !important;/s,
+    );
+    expect(styles).toMatch(
+      /\.work-ledger-root button\.work-ledger-knowledge-card,\s*\.work-ledger-root button\.work-ledger-knowledge-open\s*\{[^}]*appearance: none !important;[^}]*background-color: transparent !important;[^}]*box-shadow: none !important;/s,
+    );
+    expect(styles).toMatch(
+      /\.work-ledger-knowledge-card\s*\{[^}]*align-items: stretch;[^}]*height: auto;[^}]*justify-content: flex-start;[^}]*white-space: normal;/s,
+    );
+    expect(styles).toMatch(
+      /\.work-ledger-knowledge-open\s*\{[^}]*height: auto;[^}]*justify-content: flex-start;[^}]*white-space: normal;/s,
+    );
+  });
+
+  it("wins the cascade against Obsidian host button defaults", () => {
+    const fixture = new DOMParser().parseFromString(
+      `<style>
+        button {
+          align-items: center;
+          display: inline-flex;
+          font-weight: 500;
+          height: 32px;
+          justify-content: center;
+          white-space: nowrap;
+        }
+        button:not(.clickable-icon) {
+          background-color: rgb(1, 2, 3);
+          box-shadow: 0 1px 2px black;
+        }
+        ${readFileSync(path.join(packageRoot, "styles.css"), "utf8")}
+      </style>`,
+      "text/html",
+    );
+    const style = fixture.querySelector("style")!;
+    document.head.append(style);
+    const root = document.body.createDiv({ cls: "work-ledger-root" });
+    root.createEl("button", { cls: "work-ledger-knowledge-card", text: "Card" });
+    root.createEl("button", { cls: "work-ledger-knowledge-open", text: "Open" });
+    root.createEl("button", { cls: "work-ledger-knowledge-filter-toggle", text: "Filter" });
+
+    try {
+      const card = getComputedStyle(root.querySelector(".work-ledger-knowledge-card")!);
+      expect(card.height).toBe("auto");
+      expect(card.alignItems).toBe("stretch");
+      expect(card.justifyContent).toBe("flex-start");
+      expect(card.whiteSpace).toBe("normal");
+      expect(card.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(card.boxShadow).toBe("none");
+
+      const open = getComputedStyle(root.querySelector(".work-ledger-knowledge-open")!);
+      expect(open.height).toBe("auto");
+      expect(open.justifyContent).toBe("flex-start");
+      expect(open.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(open.boxShadow).toBe("none");
+
+      const filter = getComputedStyle(root.querySelector(".work-ledger-knowledge-filter-toggle")!);
+      expect(filter.height).toBe("26px");
+      expect(filter.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(filter.boxShadow).toBe("none");
+    } finally {
+      root.remove();
+      style.remove();
+    }
+  });
+
   it("describes the same CLI range that the runtime enforces", () => {
     const settings = readFileSync(path.join(packageRoot, "src", "settings.ts"), "utf8");
     expect(settings).toContain("work-ledger CLI >=0.11.0,<1.0.0");

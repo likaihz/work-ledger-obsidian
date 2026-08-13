@@ -38,6 +38,12 @@ dist/agent-ledger/
 Copy `main.js`, `manifest.json`, and `styles.css` into the synthetic Vault at
 `.obsidian/plugins/agent-ledger/`, reload Obsidian, and enable Agent Ledger.
 
+For repeatable verification in the real desktop runtime, use the repository-local
+synthetic Vault workflow in [Local real-Obsidian verification](docs/local-e2e.md).
+It installs the packaged plugin, connects to the real Work Ledger CLI source, checks
+the live Electron DOM, captures screenshots, and verifies that `Work/**` remains
+unchanged.
+
 ## CLI contract tests
 
 In the monorepo, contract tests automatically use the sibling Work Ledger CLI

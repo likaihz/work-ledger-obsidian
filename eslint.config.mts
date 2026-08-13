@@ -8,6 +8,7 @@ export default defineConfig(
     "dist/**",
     "main.js",
     "coverage",
+    ".e2e/**",
     "tests/fixtures",
     "esbuild.config.mjs",
     "manifest.json",
@@ -21,7 +22,12 @@ export default defineConfig(
       },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["eslint.config.mts", "vitest.config.ts", "tools/package.mjs"],
+          allowDefaultProject: [
+            "eslint.config.mts",
+            "vitest.config.ts",
+            "tools/package.mjs",
+            "tools/local-e2e.mjs",
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -32,6 +38,13 @@ export default defineConfig(
     files: ["src/settings.ts"],
     rules: {
       "obsidianmd/settings-tab/prefer-setting-definitions": "off",
+    },
+  },
+  {
+    files: ["tools/local-e2e.mjs"],
+    rules: {
+      "obsidianmd/hardcoded-config-path": "off",
+      "obsidianmd/prefer-window-timers": "off",
     },
   },
 );

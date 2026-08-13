@@ -136,6 +136,18 @@ describe("plugin package boundary", () => {
     expect(packageScript).toContain('path.join(root, "dist", manifest.id)');
   });
 
+  it("bounds Obsidian CLI calls and validates screenshots before accepting timeout recovery", () => {
+    const localE2e = readFileSync(
+      path.join(packageRoot, "tools", "local-e2e.mjs"),
+      "utf8",
+    );
+    expect(localE2e).toContain("const obsidianCommandTimeoutMs = 10_000;");
+    expect(localE2e).toContain('killSignal: "SIGKILL"');
+    expect(localE2e).toContain("function captureScreenshot(file)");
+    expect(localE2e).toContain("!isTimeoutError(error) || !isValidScreenshot(file)");
+    expect(localE2e.match(/captureScreenshot\(/g)).toHaveLength(3);
+  });
+
   it("fixes the complete CLI surface to read-only command tuples", () => {
     const client = readFileSync(path.join(packageRoot, "src", "cli", "client.ts"), "utf8");
     const main = readFileSync(path.join(packageRoot, "src", "main.ts"), "utf8");
