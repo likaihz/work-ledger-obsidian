@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 
 import type { LedgerEvent } from "../../cli/protocol";
-import { emptyState, eventIcon, eventTypeLabel } from "../../ui/components";
+import { emptyState, eventIcon, eventTypeLabel, textButton } from "../../ui/components";
 import type { PageContext } from "./types";
 
 const EVENT_TYPES: readonly LedgerEvent["type"][] = [
@@ -48,6 +48,24 @@ export function renderTimelinePage(parent: HTMLElement, context: PageContext): v
     cls: "work-ledger-timeline-type-filter",
   });
   filtersEl.createEl("legend", { text: "按事件类型筛选" });
+  const typeActions = filtersEl.createDiv({ cls: "work-ledger-timeline-type-actions" });
+  const selectAll = textButton(typeActions, "全选", () => {
+    context.actions.setTimelineEventTypes(new Set(EVENT_TYPES));
+  });
+  selectAll.type = "button";
+  selectAll.addClass("work-ledger-timeline-type-action");
+  selectAll.dataset.action = "select-all";
+  selectAll.disabled = EVENT_TYPES.every((type) => enabledTypes.has(type));
+
+  const invert = textButton(typeActions, "反选", () => {
+    context.actions.setTimelineEventTypes(
+      new Set(EVENT_TYPES.filter((type) => !enabledTypes.has(type))),
+    );
+  });
+  invert.type = "button";
+  invert.addClass("work-ledger-timeline-type-action");
+  invert.dataset.action = "invert";
+
   for (const type of EVENT_TYPES) {
     const option = filtersEl.createEl("label", { cls: `is-${type}` });
     const input = option.createEl("input", { type: "checkbox", value: type });
@@ -62,6 +80,11 @@ export function renderTimelinePage(parent: HTMLElement, context: PageContext): v
       }
       context.actions.setTimelineEventTypes(next);
     });
+    option.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      context.actions.setTimelineEventTypes(new Set([type]));
+    });
   }
 
   const eventRoot = parent.createDiv({ cls: "work-ledger-timeline-events" });
@@ -72,10 +95,13 @@ export function renderTimelinePage(parent: HTMLElement, context: PageContext): v
       timelineSummary(scopedProject?.title, snapshot.eventWindow.from, snapshot.eventWindow.to, visible.length),
     );
     if (visible.length === 0) {
+      const hasEnabledType = EVENT_TYPES.some((type) => enabledTypes.has(type));
       emptyState(
         eventRoot,
-        "当前范围没有事件",
-        "切换项目范围或事件类型，或通过 Agent 记录新的工作事件。",
+        hasEnabledType ? "当前范围没有事件" : "尚未选择事件类型",
+        hasEnabledType
+          ? "切换项目范围或事件类型，或通过 Agent 记录新的工作事件。"
+          : "请勾选至少一种事件类型，或使用“全选”恢复全部事件。",
         "calendar-days",
       );
       return;

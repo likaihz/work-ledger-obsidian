@@ -1,0 +1,197 @@
+{
+  "data": {
+    "event_window": {
+      "from": "2000-01-01T00:00:00+08:00",
+      "next_cursor": null,
+      "to": "2000-02-01T00:00:00+08:00",
+      "truncated": false
+    },
+    "events": [
+      {
+        "effective_visibility": "reportable",
+        "id": "event-20000102-091000-001",
+        "journal_path": "Work/Journal/2000/01/2000-01-02.md",
+        "occurred_at": "2000-01-02T09:10:00+08:00",
+        "project_id": "project-20260731-001",
+        "recorded_at": "2026-07-31T09:10:01+08:00",
+        "source": "codex",
+        "summary": "完成运行时底座",
+        "task_id": "task-20260731-001",
+        "time_precision": "exact",
+        "type": "idea",
+        "visibility": "reportable"
+      },
+      {
+        "effective_visibility": "reportable",
+        "id": "event-20000102-090000-001",
+        "journal_path": "Work/Journal/2000/01/2000-01-02.md",
+        "occurred_at": "2000-01-02T09:00:00+08:00",
+        "project_id": "project-20260731-001",
+        "recorded_at": "2026-07-31T09:00:01+08:00",
+        "source": "codex",
+        "summary": "提炼可复用协议边界",
+        "task_id": null,
+        "time_precision": "exact",
+        "type": "insight",
+        "visibility": "reportable"
+      }
+    ],
+    "generated_at": "2026-07-31T10:00:00+08:00",
+    "knowledge": [
+      {
+        "created_at": "2026-08-10T10:45:00+08:00",
+        "effective_visibility": "reportable",
+        "id": "knowledge-20260810-001",
+        "kind": "research",
+        "path": "Work/Knowledge/Protocol research.md",
+        "project_id": "project-20260731-001",
+        "revision": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "slug": "Protocol research",
+        "source_event_ids": [
+          "event-20000102-090000-001",
+          "event-20000102-091000-001"
+        ],
+        "status": "stable",
+        "tags": [
+          "protocol",
+          "obsidian"
+        ],
+        "title": "Protocol research",
+        "updated_at": "2026-08-10T10:45:00+08:00",
+        "visibility": "reportable",
+        "wikilink": "[[Work/Knowledge/Protocol research|Protocol research]]"
+      },
+      {
+        "created_at": "2026-08-10T11:00:00+08:00",
+        "effective_visibility": "private",
+        "id": "knowledge-20260810-002",
+        "kind": "note",
+        "path": "Work/Knowledge/Loose insight.md",
+        "project_id": null,
+        "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "slug": "Loose insight",
+        "source_event_ids": [
+          "event-20000102-091000-001"
+        ],
+        "status": "draft",
+        "tags": [],
+        "title": "Loose insight",
+        "updated_at": "2026-08-10T11:00:00+08:00",
+        "visibility": "private",
+        "wikilink": "[[Work/Knowledge/Loose insight|Loose insight]]"
+      },
+      {
+        "created_at": "2026-08-10T11:15:00+08:00",
+        "effective_visibility": "private",
+        "id": "knowledge-20260810-003",
+        "kind": "document",
+        "path": "Work/Knowledge/Project handoff document.md",
+        "project_id": "project-20260731-001",
+        "revision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "slug": "Project handoff document",
+        "source_event_ids": [],
+        "status": "stable",
+        "tags": [
+          "document",
+          "handoff"
+        ],
+        "title": "Project handoff document",
+        "updated_at": "2026-08-10T11:15:00+08:00",
+        "visibility": "private",
+        "wikilink": "[[Work/Knowledge/Project handoff document|Project handoff document]]"
+      }
+    ],
+    "projects": [
+      {
+        "created_at": "2026-07-31T08:00:00+08:00",
+        "effective_visibility": "private",
+        "end_date": null,
+        "id": "project-inbox",
+        "path": "Work/Projects/Inbox.md",
+        "revision": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "start_date": null,
+        "status": "active",
+        "tags": [],
+        "title": "Inbox",
+        "updated_at": "2026-07-31T08:00:00+08:00",
+        "visibility": "private",
+        "wikilink": "[[Work/Projects/Inbox|Inbox]]"
+      },
+      {
+        "created_at": "2026-07-31T09:00:00+08:00",
+        "effective_visibility": "reportable",
+        "end_date": null,
+        "id": "project-20260731-001",
+        "path": "Work/Projects/Work Ledger 插件.md",
+        "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "start_date": "2026-07-31",
+        "status": "active",
+        "tags": [
+          "obsidian"
+        ],
+        "title": "Work Ledger 插件",
+        "updated_at": "2026-07-31T09:00:00+08:00",
+        "visibility": "reportable",
+        "wikilink": "[[Work/Projects/Work Ledger 插件|Work Ledger 插件]]"
+      }
+    ],
+    "reports": [],
+    "snapshot_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "snapshot_schema_version": 2,
+    "source": {
+      "head_commit": "0123456789abcdef0123456789abcdef01234567",
+      "work_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "tasks": [
+      {
+        "completed_at": null,
+        "created_at": "2026-07-31T09:05:00+08:00",
+        "due_date": null,
+        "effective_visibility": "reportable",
+        "id": "task-20260731-001",
+        "initial_status": "planned",
+        "parent_id": null,
+        "path": "Work/Tasks/实现只读总览.md",
+        "planned_for": "2026-07-31",
+        "priority": "P1",
+        "project_id": "project-20260731-001",
+        "revision": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "status": "in_progress",
+        "status_changed_at": "2026-07-31T09:10:00+08:00",
+        "tags": [],
+        "title": "实现只读总览",
+        "updated_at": "2026-07-31T09:10:00+08:00",
+        "visibility": "reportable",
+        "wikilink": "[[Work/Tasks/实现只读总览|实现只读总览]]"
+      },
+      {
+        "completed_at": null,
+        "created_at": "2026-07-31T09:06:00+08:00",
+        "due_date": null,
+        "effective_visibility": "reportable",
+        "id": "task-20260731-002",
+        "initial_status": "planned",
+        "parent_id": "task-20260731-001",
+        "path": "Work/Tasks/渲染任务树.md",
+        "planned_for": null,
+        "priority": "P2",
+        "project_id": "project-20260731-001",
+        "revision": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": "planned",
+        "status_changed_at": "2026-07-31T09:06:00+08:00",
+        "tags": [],
+        "title": "渲染任务树",
+        "updated_at": "2026-07-31T09:06:00+08:00",
+        "visibility": "reportable",
+        "wikilink": "[[Work/Tasks/渲染任务树|渲染任务树]]"
+      }
+    ],
+    "vault": {
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema_version": 6,
+      "timezone": "Asia/Shanghai"
+    }
+  },
+  "ok": true,
+  "warnings": []
+}

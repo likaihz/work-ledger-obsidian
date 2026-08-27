@@ -1480,7 +1480,7 @@ describe("selected Work Ledger visual contract", () => {
     expect(styles).toContain(".work-ledger-timeline-rail::before");
   });
 
-  it("persists independent Timeline filters across selection rerenders with semantic rows", async () => {
+  it("persists Timeline filters across rerenders and supports bulk selection shortcuts", async () => {
     const idea = event("event-20260810-110000-001", "idea", "一个灵感");
     const insight = event("event-20260810-120000-002", "insight", "一个洞察");
     const store = new LedgerStore();
@@ -1523,6 +1523,16 @@ describe("selected Work Ledger visual contract", () => {
     );
     expect(view.contentEl.querySelector("fieldset.work-ledger-timeline-type-filter legend")?.textContent)
       .toBe("按事件类型筛选");
+    const initialSelectAll = view.contentEl.querySelector<HTMLButtonElement>(
+      '.work-ledger-timeline-type-action[data-action="select-all"]',
+    );
+    const initialInvert = view.contentEl.querySelector<HTMLButtonElement>(
+      '.work-ledger-timeline-type-action[data-action="invert"]',
+    );
+    expect(initialSelectAll?.textContent).toBe("全选");
+    expect(initialInvert?.textContent).toBe("反选");
+    expect(initialSelectAll?.disabled).toBe(true);
+    expect(initialInvert?.disabled).toBe(false);
     expect(ideaToggle?.checked).toBe(true);
     expect(insightToggle?.checked).toBe(true);
     expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(1);
@@ -1544,6 +1554,61 @@ describe("selected Work Ledger visual contract", () => {
     expect(view.contentEl.querySelector<HTMLInputElement>(
       '.work-ledger-timeline-type-filter input[value="insight"]',
     )?.checked).toBe(true);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(0);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-insight")).toHaveLength(1);
+
+    const action = (name: "select-all" | "invert"): HTMLButtonElement | null =>
+      view.contentEl.querySelector<HTMLButtonElement>(
+        `.work-ledger-timeline-type-action[data-action="${name}"]`,
+      );
+    expect(action("select-all")?.disabled).toBe(false);
+
+    action("invert")?.click();
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(1);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-insight")).toHaveLength(0);
+    expect(store.get().selection).toEqual({ kind: "event", id: insight.id });
+
+    action("select-all")?.click();
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(1);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-insight")).toHaveLength(1);
+    expect(action("select-all")?.disabled).toBe(true);
+
+    action("invert")?.click();
+    expect(store.get().filters.timelineEventTypes.size).toBe(0);
+    expect(view.contentEl.querySelector(".work-ledger-empty h3")?.textContent)
+      .toBe("尚未选择事件类型");
+    expect(view.contentEl.querySelector(".work-ledger-empty p")?.textContent)
+      .toBe("请勾选至少一种事件类型，或使用“全选”恢复全部事件。");
+
+    action("select-all")?.click();
+    expect(store.get().filters.timelineEventTypes.size).toBe(7);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row")).toHaveLength(2);
+
+    const selectedIdea = view.contentEl.querySelector<HTMLInputElement>(
+      '.work-ledger-timeline-type-filter input[value="idea"]',
+    );
+    const selectOnlyIdea = new MouseEvent("contextmenu", {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    });
+    selectedIdea?.dispatchEvent(selectOnlyIdea);
+    expect(selectOnlyIdea.defaultPrevented).toBe(true);
+    expect([...store.get().filters.timelineEventTypes]).toEqual(["idea"]);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(1);
+    expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-insight")).toHaveLength(0);
+
+    const unselectedInsight = view.contentEl.querySelector<HTMLInputElement>(
+      '.work-ledger-timeline-type-filter input[value="insight"]',
+    );
+    const selectOnlyInsight = new MouseEvent("contextmenu", {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    });
+    unselectedInsight?.dispatchEvent(selectOnlyInsight);
+    expect(selectOnlyInsight.defaultPrevented).toBe(true);
+    expect([...store.get().filters.timelineEventTypes]).toEqual(["insight"]);
     expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-idea")).toHaveLength(0);
     expect(view.contentEl.querySelectorAll(".work-ledger-timeline-row.is-insight")).toHaveLength(1);
     await view.onClose();

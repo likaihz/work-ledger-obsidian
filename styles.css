@@ -1737,6 +1737,42 @@
   clip-path: inset(50%);
 }
 
+.work-ledger-timeline-type-actions {
+  align-items: center;
+  border-right: 1px solid var(--wl-border);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-right: 2px;
+  padding-right: 8px;
+}
+
+.work-ledger-root button.work-ledger-timeline-type-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  color: var(--wl-action);
+  font-family: inherit;
+  font-size: 11px;
+  height: auto;
+  line-height: 1.5;
+  margin: 0;
+  padding: 1px 4px;
+}
+
+.work-ledger-root button.work-ledger-timeline-type-action:hover,
+.work-ledger-root button.work-ledger-timeline-type-action:focus-visible {
+  background: var(--wl-surface-hover);
+}
+
+.work-ledger-root button.work-ledger-timeline-type-action:disabled {
+  background: transparent;
+  color: var(--wl-faint);
+  cursor: default;
+}
+
 .work-ledger-timeline-type-filter label {
   align-items: center;
   color: var(--wl-muted);

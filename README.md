@@ -46,7 +46,8 @@ desktop workspace where you can:
    search for **Agent Ledger**, then install and enable it. You can also use the
    [Community Plugins link](obsidian://show-plugin?id=agent-ledger).
 2. Install an exact compatible `agent-ledger-harness` release that provides
-   `work-ledger >=0.11,<1.0`, and prepare a schema 5 Work Ledger Vault. See the
+   `work-ledger >=0.11,<1.0`, and prepare a schema 6 Work Ledger Vault with
+   `knowledge_kind_document=true`. See the
    [setup guide](docs/setup.md) for supported installation and migration paths.
 3. Open that same Vault in Obsidian. In **Settings → Agent Ledger**, enter the
    absolute path to the verified `work-ledger` executable. Add an absolute
@@ -88,8 +89,8 @@ before showing the error so information from another Vault is never displayed.
 | Obsidian | Desktop `1.12.0` or newer |
 | Work Ledger | `work-ledger >=0.11,<1.0`, CLI protocol 1 |
 | Vault | The same absolute Vault in the CLI and Obsidian |
-| Data | Work Ledger Vault schema 5 |
-| Knowledge capability | `knowledge_documents=true`, `knowledge.list`, and `knowledge.show` |
+| Data | Work Ledger Vault schema 6; schema 5 remains readable during rollout |
+| Knowledge capability | `knowledge_documents=true`, `knowledge_kind_document=true`, `knowledge.list`, and `knowledge.show` |
 
 To keep the public names distinct, install the `agent-ledger-harness` distribution
 to provide the `work-ledger` executable for the
@@ -138,7 +139,9 @@ writes, synchronization, report generation, and reviewed migrations.
 
 No. Knowledge create, update, archive, and restore operations belong to the
 Work Ledger CLI (normally through the `knowledge-base` workflow). Agent Ledger
-only reads `knowledge.list`, `knowledge.show`, and schema 5 Snapshot data.
+only reads `knowledge.list`, `knowledge.show`, and Snapshot data. Current
+runtimes use Snapshot schema 2 with Vault schema 6; the plugin retains a strict
+legacy Snapshot schema 1/Vault schema 5 reader during rollout.
 
 ### Does copying Agent context send it anywhere?
 

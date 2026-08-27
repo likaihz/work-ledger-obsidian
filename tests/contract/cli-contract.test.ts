@@ -22,7 +22,7 @@ import { decodeCapabilities, decodeSnapshot, decodeVersion } from "../../src/cli
 
 const packageRoot = process.cwd();
 const cliSource = path.resolve(packageRoot, "../work-ledger-cli/src");
-const fixturePath = path.join(packageRoot, "tests", "fixtures", "snapshot-v1.json");
+const fixturePath = path.join(packageRoot, "tests", "fixtures", "snapshot-v2.json");
 const temporaryRoots: string[] = [];
 
 type JsonRecord = Record<string, unknown>;
@@ -311,6 +311,17 @@ function generateKnowledgeSnapshot(root: string): unknown {
           visibility: "private",
           tags: [],
         },
+        {
+          type: "knowledge.create",
+          ref: "m-document",
+          title: "Project handoff document",
+          kind: "document",
+          status: "stable",
+          project_id: projectId,
+          body: "This project document body must not enter the snapshot.",
+          visibility: "private",
+          tags: ["document", "handoff"],
+        },
       ],
     }),
   ]);
@@ -342,6 +353,7 @@ function normalizeFixture(value: unknown): JsonRecord {
   const insight = events.find((item) => item.type === "insight");
   const research = knowledge.find((item) => item.title === "Protocol research");
   const loose = knowledge.find((item) => item.title === "Loose insight");
+  const document = knowledge.find((item) => item.title === "Project handoff document");
   for (const [item, stableId] of [
     [project, "project-20260731-001"],
     [parentTask, "task-20260731-001"],
@@ -350,6 +362,7 @@ function normalizeFixture(value: unknown): JsonRecord {
     [insight, "event-20000102-090000-001"],
     [research, "knowledge-20260810-001"],
     [loose, "knowledge-20260810-002"],
+    [document, "knowledge-20260810-003"],
   ] as Array<[JsonRecord | undefined, string]>) {
     if (item === undefined || typeof item.id !== "string") {
       throw new Error(`Generated fixture is missing the object for ${stableId}.`);
@@ -404,7 +417,13 @@ function normalizeFixture(value: unknown): JsonRecord {
     status_changed_at: "2026-07-31T09:06:00+08:00",
     revision: `sha256:${"e".repeat(64)}`,
   });
-  if (idea === undefined || insight === undefined || research === undefined || loose === undefined) {
+  if (
+    idea === undefined ||
+    insight === undefined ||
+    research === undefined ||
+    loose === undefined ||
+    document === undefined
+  ) {
     throw new Error("Generated fixture is missing its Event or Knowledge coverage.");
   }
   idea.recorded_at = "2026-07-31T09:10:01+08:00";
@@ -418,6 +437,11 @@ function normalizeFixture(value: unknown): JsonRecord {
     created_at: "2026-08-10T11:00:00+08:00",
     updated_at: "2026-08-10T11:00:00+08:00",
     revision: `sha256:${"1".repeat(64)}`,
+  });
+  Object.assign(document, {
+    created_at: "2026-08-10T11:15:00+08:00",
+    updated_at: "2026-08-10T11:15:00+08:00",
+    revision: `sha256:${"3".repeat(64)}`,
   });
   return envelope;
 }
@@ -444,6 +468,9 @@ describe("real work-ledger CLI contract", () => {
     process.env.GIT_WORK_TREE = hostileWorkTree;
     try {
       const generated = normalizeFixture(generateKnowledgeSnapshot(root));
+      if (process.env.UPDATE_KNOWLEDGE_SNAPSHOT_FIXTURE === "1") {
+        writeFileSync(fixturePath, `${JSON.stringify(generated, null, 2)}\n`, "utf8");
+      }
       const expected = JSON.parse(readFileSync(fixturePath, "utf8")) as JsonRecord;
       expect(generated).toEqual(expected);
     } finally {
@@ -462,7 +489,7 @@ describe("real work-ledger CLI contract", () => {
     expect(readdirSync(hostileWorkTree)).toEqual([]);
   });
 
-  it("reproduces and decodes the schema 5 Knowledge fixture from a synthetic Vault", () => {
+  it("reproduces and decodes the schema 6 document Knowledge fixture from a synthetic Vault", () => {
     const root = mkdtempSync(path.join(tmpdir(), "work-ledger-obsidian-contract-"));
     temporaryRoots.push(root);
 
@@ -476,6 +503,7 @@ describe("real work-ledger CLI contract", () => {
     expect(capabilities.features.rich_report_facts).toBe(true);
     expect(capabilities.features.reportable_project_default).toBe(true);
     expect(capabilities.features.knowledge_documents).toBe(true);
+    expect(capabilities.features.knowledge_kind_document).toBe(true);
     expect(capabilities.commands.has("knowledge.list")).toBe(true);
     expect(capabilities.commands.has("knowledge.show")).toBe(true);
 
@@ -511,11 +539,13 @@ describe("real work-ledger CLI contract", () => {
     expect(normalizedEnvelope).toEqual(expectedEnvelope);
 
     const snapshot = decodeSnapshot(generatedEnvelope);
-    expect(snapshot.vault.schemaVersion).toBe(5);
+    expect(snapshot.schemaVersion).toBe(2);
+    expect(snapshot.vault.schemaVersion).toBe(6);
     expect(snapshot.projects.some((item) => item.title === "Work Ledger 插件")).toBe(true);
     expect(snapshot.tasks.some((item) => item.title === "实现只读总览")).toBe(true);
     expect(snapshot.events.map((item) => item.type)).toEqual(["idea", "insight"]);
-    expect(snapshot.knowledge.map((item) => item.status)).toEqual(["stable", "draft"]);
+    expect(snapshot.knowledge.map((item) => item.status)).toEqual(["stable", "draft", "stable"]);
+    expect(snapshot.knowledge.map((item) => item.kind)).toContain("document");
     expect(snapshot.knowledge[0]?.sourceEventIds).toHaveLength(2);
     expect(snapshot.knowledge[0]?.effectiveVisibility).toBe("reportable");
     expect(snapshot.knowledge[1]?.projectId).toBeNull();

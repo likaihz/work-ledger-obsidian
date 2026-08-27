@@ -22,6 +22,7 @@ const KNOWLEDGE_KINDS: ReadonlyArray<{
   { value: "comparison", label: "比较" },
   { value: "technical_note", label: "技术笔记" },
   { value: "essay", label: "文章" },
+  { value: "document", label: "文档" },
   { value: "note", label: "笔记" },
 ];
 

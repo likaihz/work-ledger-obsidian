@@ -11,6 +11,11 @@ function fixture(): Record<string, unknown> {
   return JSON.parse(readFileSync(fixturePath, "utf8")) as Record<string, unknown>;
 }
 
+function documentFixture(): Record<string, unknown> {
+  const fixturePath = path.join(process.cwd(), "tests", "fixtures", "snapshot-v2.json");
+  return JSON.parse(readFileSync(fixturePath, "utf8")) as Record<string, unknown>;
+}
+
 describe("snapshot protocol", () => {
   it("decodes schema 1, thought events, and Knowledge fields into camelCase", () => {
     const snapshot = decodeSnapshot(fixture());
@@ -70,9 +75,26 @@ describe("snapshot protocol", () => {
     expect(() => decodeSnapshot(missingKnowledge)).toThrow(/knowledge.*array/i);
   });
 
+  it("decodes schema 2 document Knowledge while schema 1 remains strict", () => {
+    const current = decodeSnapshot(documentFixture());
+    expect(current.schemaVersion).toBe(2);
+    expect(current.vault.schemaVersion).toBe(6);
+    expect(current.knowledge.find((item) => item.kind === "document")).toMatchObject({
+      title: "Project handoff document",
+      kind: "document",
+      status: "stable",
+    });
+
+    const legacyWithDocument = fixture();
+    const legacyData = legacyWithDocument.data as Record<string, unknown>;
+    ((legacyData.knowledge as Array<Record<string, unknown>>)[0] as Record<string, unknown>).kind =
+      "document";
+    expect(() => decodeSnapshot(legacyWithDocument)).toThrow(ProtocolError);
+  });
+
   it("rejects unknown schemas and Snapshot body leakage", () => {
     const unknownSchema = fixture();
-    (unknownSchema.data as Record<string, unknown>).snapshot_schema_version = 2;
+    (unknownSchema.data as Record<string, unknown>).snapshot_schema_version = 3;
     expect(() => decodeSnapshot(unknownSchema)).toThrow(ProtocolError);
 
     const withBody = fixture();

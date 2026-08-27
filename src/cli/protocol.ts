@@ -2,7 +2,13 @@ export type ProjectStatus = "active" | "archived";
 export type TaskStatus = "inbox" | "planned" | "in_progress" | "blocked" | "done" | "cancelled";
 export type Priority = "P0" | "P1" | "P2" | "P3";
 export type Visibility = "private" | "reportable";
-export type KnowledgeKind = "research" | "comparison" | "technical_note" | "essay" | "note";
+export type KnowledgeKind =
+  | "research"
+  | "comparison"
+  | "technical_note"
+  | "essay"
+  | "document"
+  | "note";
 export type KnowledgeStatus = "draft" | "stable" | "archived";
 export type EntityKind = "project" | "task" | "knowledge" | "event" | "report";
 
@@ -115,7 +121,7 @@ export interface ReportExport {
 }
 
 export interface LedgerSnapshot {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   generatedAt: string;
   vault: {
     id: string;
@@ -425,7 +431,11 @@ function decodeEvent(value: unknown, index: number): LedgerEvent {
   };
 }
 
-function decodeKnowledge(value: unknown, index: number): LedgerKnowledge {
+function decodeKnowledge(
+  value: unknown,
+  index: number,
+  snapshotSchemaVersion: 1 | 2,
+): LedgerKnowledge {
   const item = record(value, `knowledge[${index}]`);
   if ("body" in item) {
     throw new ProtocolError(`knowledge[${index}] must not contain body.`);
@@ -436,13 +446,13 @@ function decodeKnowledge(value: unknown, index: number): LedgerKnowledge {
     slug: string(item.slug, `knowledge[${index}].slug`),
     path: relativePath(item.path, `knowledge[${index}].path`),
     wikilink: string(item.wikilink, `knowledge[${index}].wikilink`),
-    kind: enumValue(item.kind, `knowledge[${index}].kind`, [
-      "research",
-      "comparison",
-      "technical_note",
-      "essay",
-      "note",
-    ]),
+    kind: enumValue(
+      item.kind,
+      `knowledge[${index}].kind`,
+      snapshotSchemaVersion === 1
+        ? ["research", "comparison", "technical_note", "essay", "note"]
+        : ["research", "comparison", "technical_note", "essay", "document", "note"],
+    ),
     status: enumValue(item.status, `knowledge[${index}].status`, [
       "draft",
       "stable",
@@ -491,19 +501,22 @@ function decodeReport(value: unknown, index: number): LedgerReport {
 export function decodeSnapshot(value: unknown): LedgerSnapshot {
   const data = record(envelopeData(value), "snapshot.data");
   const schemaVersion = number(data.snapshot_schema_version, "snapshot.snapshot_schema_version");
-  if (schemaVersion !== 1) {
+  if (schemaVersion !== 1 && schemaVersion !== 2) {
     throw new ProtocolError(`Unsupported snapshot schema: ${schemaVersion}.`);
   }
+  const supportedSchemaVersion: 1 | 2 = schemaVersion;
   const vault = record(data.vault, "snapshot.vault");
   const source = record(data.source, "snapshot.source");
   const eventWindow = record(data.event_window, "snapshot.event_window");
   const projects = array(data.projects, "snapshot.projects").map(decodeProject);
   const tasks = array(data.tasks, "snapshot.tasks").map(decodeTask);
   const events = array(data.events, "snapshot.events").map(decodeEvent);
-  const knowledge = array(data.knowledge, "snapshot.knowledge").map(decodeKnowledge);
+  const knowledge = array(data.knowledge, "snapshot.knowledge").map((item, index) =>
+    decodeKnowledge(item, index, supportedSchemaVersion),
+  );
   const reports = array(data.reports, "snapshot.reports").map(decodeReport);
   return {
-    schemaVersion: 1,
+    schemaVersion: supportedSchemaVersion,
     generatedAt: timestamp(data.generated_at, "snapshot.generated_at"),
     vault: {
       id: digest(vault.id, "snapshot.vault.id"),

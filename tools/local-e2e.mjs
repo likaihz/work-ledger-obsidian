@@ -30,7 +30,7 @@ const pluginTarget = path.join(vaultRoot, ".obsidian", "plugins", pluginId);
 const cliSource = path.join(repositoryRoot, "packages", "work-ledger-cli", "src");
 const obsidianCli = process.env.OBSIDIAN_CLI || "obsidian";
 const obsidianCommandTimeoutMs = 10_000;
-const expectedDefaultKnowledge = 5;
+const expectedDefaultKnowledge = 6;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function output(message) {
@@ -251,6 +251,17 @@ function seedVault() {
           body: "用于筛选和详情交互验证。",
           visibility: "reportable",
           tags: ["acceptance", "interaction"],
+        },
+        {
+          type: "knowledge.create",
+          ref: "m-knowledge-document",
+          title: "个人项目交接文档",
+          kind: "document",
+          status: "stable",
+          project_id: projectId,
+          body: "用于验证项目文档在 Knowledge 页面中的类型、筛选和详情展示。",
+          visibility: "private",
+          tags: ["document", "handoff"],
         },
         {
           type: "knowledge.create",
@@ -537,9 +548,39 @@ async function verifyKnowledge() {
   const defaultCapture = path.join(captureRoot, "knowledge-default.png");
   captureScreenshot(defaultCapture);
 
+  evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector('button[aria-label="启用类型筛选：文档"]')?.click() ?? true) })`);
+  await waitForSelector(".work-ledger-knowledge-card", 1);
+  const documentFilter = evaluate(`JSON.stringify((() => {
+    const card = document.querySelector(".work-ledger-knowledge-card");
+    return {
+      title: card?.querySelector(".work-ledger-knowledge-title")?.textContent?.trim() ?? null,
+      text: card?.textContent ?? "",
+    };
+  })())`);
+  if (
+    documentFilter.title !== "个人项目交接文档" ||
+    !documentFilter.text.includes("文档") ||
+    !documentFilter.text.includes("#document")
+  ) {
+    throw new Error(`Document Knowledge filter failed: ${JSON.stringify(documentFilter)}`);
+  }
+  evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector('button[aria-label="取消类型筛选：文档"]')?.click() ?? true) })`);
+  await waitForSelector(".work-ledger-knowledge-card", expectedDefaultKnowledge);
+
   evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector(".work-ledger-knowledge-card")?.click() ?? true) })`);
   await waitForSelector(".work-ledger-knowledge-card-shell.is-selected");
   await waitForSelector(".work-ledger-markdown");
+  const documentInspector = evaluate(`JSON.stringify({
+    title: document.querySelector(".work-ledger-inspector h2")?.textContent?.trim() ?? null,
+    text: document.querySelector(".work-ledger-inspector")?.textContent ?? "",
+  })`);
+  if (
+    documentInspector.title !== "个人项目交接文档" ||
+    !documentInspector.text.includes("类型文档") ||
+    !documentInspector.text.includes("用于验证项目文档在 Knowledge 页面中的类型、筛选和详情展示。")
+  ) {
+    throw new Error(`Document Knowledge Inspector failed: ${JSON.stringify(documentInspector)}`);
+  }
   const selectedCapture = path.join(captureRoot, "knowledge-selected.png");
   captureScreenshot(selectedCapture);
 

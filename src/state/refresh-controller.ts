@@ -21,7 +21,8 @@ const REQUIRED_FEATURES = [
   "clean_report_export",
   "knowledge_documents",
 ] as const;
-const REQUIRED_VAULT_SCHEMA = 5;
+const LEGACY_VAULT_SCHEMA = 5;
+const DOCUMENT_VAULT_SCHEMA = 6;
 
 export interface RuntimeSettings {
   executablePath: string;
@@ -44,6 +45,8 @@ export class RefreshController {
   private readonly auxiliarySlotGenerations = new Map<AuxiliarySlot, number>();
   private debounceTimer: number | null = null;
   private disposed = false;
+  private targetVaultSchema = DOCUMENT_VAULT_SCHEMA;
+  private targetSnapshotSchema: 1 | 2 = 2;
 
   constructor(
     private readonly store: LedgerStore,
@@ -113,11 +116,13 @@ export class RefreshController {
           version.product !== "work-ledger-cli" ||
           version.protocolVersion !== 1 ||
           !isCompatibleCliVersion(version.cliVersion) ||
-          !version.vaultSchemaVersions.includes(REQUIRED_VAULT_SCHEMA)
+          !version.vaultSchemaVersions.some(
+            (schema) => schema === LEGACY_VAULT_SCHEMA || schema === DOCUMENT_VAULT_SCHEMA,
+          )
         ) {
           throw new CliInvocationError(
             "protocol",
-            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5 support.`,
+            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5 or 6 support.`,
             "INCOMPATIBLE",
             {
               product: version.product,
@@ -127,7 +132,7 @@ export class RefreshController {
               expectedProduct: "work-ledger-cli",
               requiredCliRange: ">=0.11.0,<1.0.0",
               requiredProtocolVersion: 1,
-              requiredVaultSchema: REQUIRED_VAULT_SCHEMA,
+              supportedVaultSchemas: [LEGACY_VAULT_SCHEMA, DOCUMENT_VAULT_SCHEMA],
             },
           );
         }
@@ -141,12 +146,22 @@ export class RefreshController {
         const missingFeatures = REQUIRED_FEATURES.filter(
           (feature) => capabilities.features[feature] !== true,
         );
+        const advertisesDocumentKind =
+          capabilities.features.knowledge_kind_document === true;
+        const negotiatedVaultSchema = advertisesDocumentKind
+          ? DOCUMENT_VAULT_SCHEMA
+          : LEGACY_VAULT_SCHEMA;
+        const documentCapabilityMismatch =
+          (version.vaultSchemaVersions.includes(DOCUMENT_VAULT_SCHEMA) &&
+            !advertisesDocumentKind) ||
+          !version.vaultSchemaVersions.includes(negotiatedVaultSchema);
         if (
           capabilities.product !== version.product ||
           capabilities.protocolVersion !== version.protocolVersion ||
           capabilities.cliVersion !== version.cliVersion ||
           missingCommands.length > 0 ||
-          missingFeatures.length > 0
+          missingFeatures.length > 0 ||
+          documentCapabilityMismatch
         ) {
           throw new CliInvocationError(
             "protocol",
@@ -164,9 +179,13 @@ export class RefreshController {
               capabilitiesProtocolVersion: capabilities.protocolVersion,
               missingCommands,
               missingFeatures,
+              knowledgeKindDocument: capabilities.features.knowledge_kind_document ?? false,
+              negotiatedVaultSchema,
             },
           );
         }
+        this.targetVaultSchema = negotiatedVaultSchema;
+        this.targetSnapshotSchema = advertisesDocumentKind ? 2 : 1;
         requestVersion = version;
         requestCapabilities = capabilities;
         handshakeValidated = true;
@@ -201,16 +220,31 @@ export class RefreshController {
         );
         return;
       }
-      if (snapshot.vault.schemaVersion !== REQUIRED_VAULT_SCHEMA) {
+      if (snapshot.schemaVersion !== this.targetSnapshotSchema) {
+        this.client = null;
+        this.migrationClient = null;
+        this.handshakeValid = false;
+        this.store.clearBusinessState(
+          `Snapshot schema ${snapshot.schemaVersion} is incompatible with Vault schema ${this.targetVaultSchema}.`,
+          "INCOMPATIBLE",
+          {
+            actualSnapshotSchema: snapshot.schemaVersion,
+            requiredSnapshotSchema: this.targetSnapshotSchema,
+            negotiatedVaultSchema: this.targetVaultSchema,
+          },
+        );
+        return;
+      }
+      if (snapshot.vault.schemaVersion !== this.targetVaultSchema) {
         this.client = null;
         this.migrationClient = handshakeValidated ? requestClient : null;
         this.handshakeValid = false;
         this.store.clearBusinessState(
-          `Vault schema ${snapshot.vault.schemaVersion} requires migration to schema ${REQUIRED_VAULT_SCHEMA}.`,
+          `Vault schema ${snapshot.vault.schemaVersion} requires migration to schema ${this.targetVaultSchema}.`,
           "MIGRATION_REQUIRED",
           {
             currentVersion: snapshot.vault.schemaVersion,
-            targetVersion: REQUIRED_VAULT_SCHEMA,
+            targetVersion: this.targetVaultSchema,
           },
         );
         return;
@@ -355,7 +389,7 @@ export class RefreshController {
     }
     try {
       const plan = await request.client.migrationPlan(
-        REQUIRED_VAULT_SCHEMA,
+        this.targetVaultSchema,
         request.controller.signal,
       );
       if (this.isAuxiliaryCurrent(request)) {

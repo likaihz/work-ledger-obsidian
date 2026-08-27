@@ -366,7 +366,7 @@ describe("plugin package boundary", () => {
     ).toContain("child-process-surface");
   });
 
-  it("publishes the schema 5 Knowledge reader boundary", () => {
+  it("publishes the schema 6 document Knowledge reader boundary", () => {
     const protocol = readFileSync(path.join(packageRoot, "src", "cli", "protocol.ts"), "utf8");
     const controller = readFileSync(
       path.join(packageRoot, "src", "state", "refresh-controller.ts"),
@@ -379,7 +379,7 @@ describe("plugin package boundary", () => {
     const bundle = readFileSync(path.join(packageRoot, "main.js"), "utf8");
     const manifest = readFileSync(path.join(packageRoot, "manifest.json"), "utf8");
     const fixtureEnvelope = JSON.parse(
-      readFileSync(path.join(packageRoot, "tests", "fixtures", "snapshot-v1.json"), "utf8"),
+      readFileSync(path.join(packageRoot, "tests", "fixtures", "snapshot-v2.json"), "utf8"),
     ) as { data: Record<string, unknown> };
     const fixture = decodeSnapshot(fixtureEnvelope);
     const entityKinds: EntityKind[] = ["project", "task", "knowledge", "event", "report"];
@@ -388,11 +388,16 @@ describe("plugin package boundary", () => {
     expect(protocol).toContain(
       'export type EntityKind = "project" | "task" | "knowledge" | "event" | "report";',
     );
-    expect(controller).toContain("const REQUIRED_VAULT_SCHEMA = 5;");
+    expect(controller).toContain("const LEGACY_VAULT_SCHEMA = 5;");
+    expect(controller).toContain("const DOCUMENT_VAULT_SCHEMA = 6;");
+    expect(controller).toContain("private targetSnapshotSchema: 1 | 2 = 2;");
     expect(controller).toContain('"knowledge_documents"');
+    expect(controller).toContain("knowledge_kind_document");
     expect(controller).toContain('"knowledge.list"');
     expect(controller).toContain('"knowledge.show"');
-    expect(fixture.vault.schemaVersion).toBe(5);
+    expect(fixture.schemaVersion).toBe(2);
+    expect(fixture.vault.schemaVersion).toBe(6);
+    expect(fixture.knowledge.some((item) => item.kind === "document")).toBe(true);
     expect(fixtureEnvelope.data).toHaveProperty("knowledge");
     expect(contract).toContain("UPDATE_KNOWLEDGE_SNAPSHOT_FIXTURE=1");
     for (const collection of [
@@ -416,7 +421,8 @@ describe("plugin package boundary", () => {
       expect(packaged).not.toMatch(/(?:readFile|writeFile).*\.md/);
     }
     expect(bundle).toContain("knowledge_documents");
-    expect(bundle).toContain("schema 5 support");
+    expect(bundle).toContain("knowledge_kind_document");
+    expect(bundle).toContain("schema 5 or 6 support");
   });
 
   it("keeps Knowledge selectors correct at the documented scale", () => {

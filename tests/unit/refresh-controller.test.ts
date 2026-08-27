@@ -20,7 +20,7 @@ const VERSION: VersionInfo = {
   product: "work-ledger-cli",
   cliVersion: "0.11.0",
   protocolVersion: 1,
-  vaultSchemaVersions: [1, 2, 3, 4, 5],
+  vaultSchemaVersions: [1, 2, 3, 4, 5, 6],
 };
 
 const CAPABILITIES: CapabilityInfo = {
@@ -33,10 +33,16 @@ const CAPABILITIES: CapabilityInfo = {
     inherited_child_projects: true,
     clean_report_export: true,
     knowledge_documents: true,
+    knowledge_kind_document: true,
   },
 };
 
 function fixtureSnapshot(): LedgerSnapshot {
+  const fixturePath = path.join(process.cwd(), "tests", "fixtures", "snapshot-v2.json");
+  return decodeSnapshot(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown);
+}
+
+function legacyFixtureSnapshot(): LedgerSnapshot {
   const fixturePath = path.join(process.cwd(), "tests", "fixtures", "snapshot-v1.json");
   return decodeSnapshot(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown);
 }
@@ -167,9 +173,9 @@ class MigrationRequiredClient extends FakeClient {
     return Promise.reject(
       new CliInvocationError(
         "cli",
-        "Vault schema 4 requires migration to schema 5.",
+        "Vault schema 5 requires migration to schema 6.",
         "MIGRATION_REQUIRED",
-        { current_version: 4, target_version: 5 },
+        { current_version: 5, target_version: 6 },
       ),
     );
   }
@@ -177,8 +183,8 @@ class MigrationRequiredClient extends FakeClient {
   override migrationPlan(): Promise<Record<string, unknown>> {
     this.migrationPlanCalls += 1;
     return Promise.resolve({
-      current_schema_version: 4,
-      target_schema_version: 5,
+      current_schema_version: 5,
+      target_schema_version: 6,
       affected_paths: ["Work/Tasks/Legacy.md"],
     });
   }
@@ -290,7 +296,42 @@ async function waitFor(condition: () => boolean): Promise<void> {
 }
 
 describe("refresh controller", () => {
-  it("accepts protocol 1 only with schema 5 and the complete Knowledge capability set", async () => {
+  it("keeps the legacy schema 5 and Snapshot 1 reader compatible during rollout", async () => {
+    const snapshot = legacyFixtureSnapshot();
+    const legacyVersion: VersionInfo = {
+      ...VERSION,
+      vaultSchemaVersions: [1, 2, 3, 4, 5],
+    };
+    const legacyCapabilities: CapabilityInfo = {
+      ...CAPABILITIES,
+      features: {
+        read_only_snapshot: true,
+        inherited_child_projects: true,
+        clean_report_export: true,
+        knowledge_documents: true,
+      },
+    };
+    const store = new LedgerStore();
+    const refresh = controller(
+      store,
+      new FakeClient(
+        () => Promise.resolve(snapshot),
+        undefined,
+        legacyCapabilities,
+        legacyVersion,
+      ),
+      snapshot.vault.id,
+    );
+
+    await refresh.refresh(true);
+
+    expect(store.get().connection.phase).toBe("ready");
+    expect(store.get().snapshot?.schemaVersion).toBe(1);
+    expect(store.get().snapshot?.vault.schemaVersion).toBe(5);
+    refresh.dispose();
+  });
+
+  it("accepts protocol 1 with schema 6 and the document Knowledge capability", async () => {
     const snapshot = fixtureSnapshot();
     const store = new LedgerStore();
     const refresh = controller(store, new FakeClient(() => Promise.resolve(snapshot)), snapshot.vault.id);
@@ -298,12 +339,38 @@ describe("refresh controller", () => {
     await refresh.refresh(true);
 
     expect(store.get().connection.phase).toBe("ready");
-    expect(store.get().snapshot?.vault.schemaVersion).toBe(5);
+    expect(store.get().snapshot?.vault.schemaVersion).toBe(6);
     expect(store.get().capabilities?.features.knowledge_documents).toBe(true);
+    expect(store.get().capabilities?.features.knowledge_kind_document).toBe(true);
     refresh.dispose();
   });
 
-  it("requires schema 4 Vaults to migrate to schema 5", async () => {
+  it("rejects Snapshot schema 1 from a schema 6 document-capable runtime", async () => {
+    const current = fixtureSnapshot();
+    const legacy = legacyFixtureSnapshot();
+    const snapshot: LedgerSnapshot = {
+      ...legacy,
+      vault: { ...legacy.vault, id: current.vault.id, schemaVersion: 6 },
+    };
+    const store = new LedgerStore();
+    const refresh = controller(store, new FakeClient(() => Promise.resolve(snapshot)), current.vault.id);
+
+    await refresh.refresh(true);
+
+    expect(store.get().connection).toMatchObject({
+      phase: "degraded",
+      code: "INCOMPATIBLE",
+      details: {
+        actualSnapshotSchema: 1,
+        requiredSnapshotSchema: 2,
+        negotiatedVaultSchema: 6,
+      },
+    });
+    expect(store.get().snapshot).toBeNull();
+    refresh.dispose();
+  });
+
+  it("requires older Vaults to migrate to schema 6", async () => {
     const snapshot = fixtureSnapshot();
     const schemaFour = { ...snapshot, vault: { ...snapshot.vault, schemaVersion: 4 } };
     const store = new LedgerStore();
@@ -314,7 +381,7 @@ describe("refresh controller", () => {
     expect(store.get().connection).toMatchObject({
       phase: "degraded",
       code: "MIGRATION_REQUIRED",
-      details: { currentVersion: 4, targetVersion: 5 },
+      details: { currentVersion: 4, targetVersion: 6 },
     });
     expect(store.get().snapshot).toBeNull();
     await refresh.loadDoctor();
@@ -323,7 +390,7 @@ describe("refresh controller", () => {
       refresh.exportReport("2026-W31", "reportable", "markdown"),
     ).rejects.toMatchObject({ kind: "configuration" });
     await refresh.loadMigrationPlan();
-    expect(store.get().migrationPlan).toMatchObject({ target_schema_version: 5 });
+    expect(store.get().migrationPlan).toMatchObject({ target_schema_version: 6 });
     refresh.dispose();
   });
 
@@ -421,9 +488,12 @@ describe("refresh controller", () => {
 
   it.each([
     {
-      label: "does not advertise schema 5",
+      label: "does not advertise schema 5 or 6",
       version: { ...VERSION, vaultSchemaVersions: [1, 2, 3, 4] },
-      expectedDetails: { requiredVaultSchema: 5, vaultSchemaVersions: [1, 2, 3, 4] },
+      expectedDetails: {
+        supportedVaultSchemas: [5, 6],
+        vaultSchemaVersions: [1, 2, 3, 4],
+      },
     },
     {
       label: "is older than 0.11",
@@ -957,8 +1027,8 @@ describe("refresh controller", () => {
 
     await refresh.loadMigrationPlan();
     expect(store.get().migrationPlan).toMatchObject({
-      current_schema_version: 4,
-      target_schema_version: 5,
+      current_schema_version: 5,
+      target_schema_version: 6,
     });
     refresh.dispose();
   });
@@ -989,13 +1059,13 @@ describe("refresh controller", () => {
     expect(store.get().connection).toMatchObject({
       phase: "degraded",
       code: "MIGRATION_REQUIRED",
-      details: { current_version: 4, target_version: 5 },
+      details: { current_version: 5, target_version: 6 },
     });
     expect(store.get().snapshot).toBeNull();
     expect(store.get().selection).toBeNull();
     expect(store.get().details.size).toBe(0);
     await refresh.loadMigrationPlan();
-    expect(store.get().migrationPlan).toMatchObject({ target_schema_version: 5 });
+    expect(store.get().migrationPlan).toMatchObject({ target_schema_version: 6 });
     refresh.dispose();
   });
 
@@ -1025,7 +1095,7 @@ describe("refresh controller", () => {
     await waitFor(() => migration.migrationPlanCalls === 1);
 
     await refresh.refresh(true);
-    pendingPlan.resolve({ target_schema_version: 5, affected_paths: ["stale"] });
+    pendingPlan.resolve({ target_schema_version: 6, affected_paths: ["stale"] });
     await planLoad;
 
     expect(store.get().connection.code).toBe("INCOMPATIBLE");
