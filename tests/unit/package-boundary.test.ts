@@ -366,7 +366,7 @@ describe("plugin package boundary", () => {
     ).toContain("child-process-surface");
   });
 
-  it("publishes the schema 6 document Knowledge reader boundary", () => {
+  it("publishes the schema 7 memo Knowledge reader boundary with schema 6 compatibility", () => {
     const protocol = readFileSync(path.join(packageRoot, "src", "cli", "protocol.ts"), "utf8");
     const controller = readFileSync(
       path.join(packageRoot, "src", "state", "refresh-controller.ts"),
@@ -382,6 +382,10 @@ describe("plugin package boundary", () => {
       readFileSync(path.join(packageRoot, "tests", "fixtures", "snapshot-v2.json"), "utf8"),
     ) as { data: Record<string, unknown> };
     const fixture = decodeSnapshot(fixtureEnvelope);
+    const memoEnvelope = JSON.parse(
+      readFileSync(path.join(packageRoot, "tests", "fixtures", "snapshot-v3.json"), "utf8"),
+    ) as { data: Record<string, unknown> };
+    const memoFixture = decodeSnapshot(memoEnvelope);
     const entityKinds: EntityKind[] = ["project", "task", "knowledge", "event", "report"];
 
     expect(entityKinds).toHaveLength(5);
@@ -390,14 +394,19 @@ describe("plugin package boundary", () => {
     );
     expect(controller).toContain("const LEGACY_VAULT_SCHEMA = 5;");
     expect(controller).toContain("const DOCUMENT_VAULT_SCHEMA = 6;");
-    expect(controller).toContain("private targetSnapshotSchema: 1 | 2 = 2;");
+    expect(controller).toContain("const MEMO_VAULT_SCHEMA = 7;");
+    expect(controller).toContain("private targetSnapshotSchema: 1 | 2 | 3 = 3;");
     expect(controller).toContain('"knowledge_documents"');
     expect(controller).toContain("knowledge_kind_document");
+    expect(controller).toContain("knowledge_kind_memo");
     expect(controller).toContain('"knowledge.list"');
     expect(controller).toContain('"knowledge.show"');
     expect(fixture.schemaVersion).toBe(2);
     expect(fixture.vault.schemaVersion).toBe(6);
     expect(fixture.knowledge.some((item) => item.kind === "document")).toBe(true);
+    expect(memoFixture.schemaVersion).toBe(3);
+    expect(memoFixture.vault.schemaVersion).toBe(7);
+    expect(memoFixture.knowledge.some((item) => item.kind === "memo")).toBe(true);
     expect(fixtureEnvelope.data).toHaveProperty("knowledge");
     expect(contract).toContain("UPDATE_KNOWLEDGE_SNAPSHOT_FIXTURE=1");
     for (const collection of [
@@ -422,7 +431,8 @@ describe("plugin package boundary", () => {
     }
     expect(bundle).toContain("knowledge_documents");
     expect(bundle).toContain("knowledge_kind_document");
-    expect(bundle).toContain("schema 5 or 6 support");
+    expect(bundle).toContain("knowledge_kind_memo");
+    expect(bundle).toContain("schema 5, 6, or 7 support");
   });
 
   it("keeps Knowledge selectors correct at the documented scale", () => {

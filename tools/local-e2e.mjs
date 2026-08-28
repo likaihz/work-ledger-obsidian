@@ -30,7 +30,7 @@ const pluginTarget = path.join(vaultRoot, ".obsidian", "plugins", pluginId);
 const cliSource = path.join(repositoryRoot, "packages", "work-ledger-cli", "src");
 const obsidianCli = process.env.OBSIDIAN_CLI || "obsidian";
 const obsidianCommandTimeoutMs = 10_000;
-const expectedDefaultKnowledge = 6;
+const expectedDefaultKnowledge = 7;
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function output(message) {
@@ -262,6 +262,16 @@ function seedVault() {
           body: "用于验证项目文档在 Knowledge 页面中的类型、筛选和详情展示。",
           visibility: "private",
           tags: ["document", "handoff"],
+        },
+        {
+          type: "knowledge.create",
+          ref: "m-knowledge-memo",
+          title: "个人云资源与订阅续费备忘录",
+          kind: "memo",
+          status: "stable",
+          body: "用于验证持续维护的个人事实清单在 Knowledge 页面中的类型、筛选和详情展示。",
+          visibility: "private",
+          tags: ["memo", "subscriptions"],
         },
         {
           type: "knowledge.create",
@@ -567,19 +577,38 @@ async function verifyKnowledge() {
   evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector('button[aria-label="取消类型筛选：文档"]')?.click() ?? true) })`);
   await waitForSelector(".work-ledger-knowledge-card", expectedDefaultKnowledge);
 
+  evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector('button[aria-label="启用类型筛选：备忘录"]')?.click() ?? true) })`);
+  await waitForSelector(".work-ledger-knowledge-card", 1);
+  const memoFilter = evaluate(`JSON.stringify((() => {
+    const card = document.querySelector(".work-ledger-knowledge-card");
+    return {
+      title: card?.querySelector(".work-ledger-knowledge-title")?.textContent?.trim() ?? null,
+      text: card?.textContent ?? "",
+    };
+  })())`);
+  if (
+    memoFilter.title !== "个人云资源与订阅续费备忘录" ||
+    !memoFilter.text.includes("备忘录") ||
+    !memoFilter.text.includes("#memo")
+  ) {
+    throw new Error(`Memo Knowledge filter failed: ${JSON.stringify(memoFilter)}`);
+  }
+  evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector('button[aria-label="取消类型筛选：备忘录"]')?.click() ?? true) })`);
+  await waitForSelector(".work-ledger-knowledge-card", expectedDefaultKnowledge);
+
   evaluate(`JSON.stringify({ clicked: Boolean(document.querySelector(".work-ledger-knowledge-card")?.click() ?? true) })`);
   await waitForSelector(".work-ledger-knowledge-card-shell.is-selected");
   await waitForSelector(".work-ledger-markdown");
-  const documentInspector = evaluate(`JSON.stringify({
+  const memoInspector = evaluate(`JSON.stringify({
     title: document.querySelector(".work-ledger-inspector h2")?.textContent?.trim() ?? null,
     text: document.querySelector(".work-ledger-inspector")?.textContent ?? "",
   })`);
   if (
-    documentInspector.title !== "个人项目交接文档" ||
-    !documentInspector.text.includes("类型文档") ||
-    !documentInspector.text.includes("用于验证项目文档在 Knowledge 页面中的类型、筛选和详情展示。")
+    memoInspector.title !== "个人云资源与订阅续费备忘录" ||
+    !memoInspector.text.includes("类型备忘录") ||
+    !memoInspector.text.includes("用于验证持续维护的个人事实清单在 Knowledge 页面中的类型、筛选和详情展示。")
   ) {
-    throw new Error(`Document Knowledge Inspector failed: ${JSON.stringify(documentInspector)}`);
+    throw new Error(`Memo Knowledge Inspector failed: ${JSON.stringify(memoInspector)}`);
   }
   const selectedCapture = path.join(captureRoot, "knowledge-selected.png");
   captureScreenshot(selectedCapture);

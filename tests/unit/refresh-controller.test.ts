@@ -42,6 +42,11 @@ function fixtureSnapshot(): LedgerSnapshot {
   return decodeSnapshot(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown);
 }
 
+function memoFixtureSnapshot(): LedgerSnapshot {
+  const fixturePath = path.join(process.cwd(), "tests", "fixtures", "snapshot-v3.json");
+  return decodeSnapshot(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown);
+}
+
 function legacyFixtureSnapshot(): LedgerSnapshot {
   const fixturePath = path.join(process.cwd(), "tests", "fixtures", "snapshot-v1.json");
   return decodeSnapshot(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown);
@@ -345,6 +350,53 @@ describe("refresh controller", () => {
     refresh.dispose();
   });
 
+  it("accepts schema 7 and snapshot schema 3 with the memo Knowledge capability", async () => {
+    const snapshot = memoFixtureSnapshot();
+    const version = { ...VERSION, vaultSchemaVersions: [...VERSION.vaultSchemaVersions, 7] };
+    const capabilities = {
+      ...CAPABILITIES,
+      features: { ...CAPABILITIES.features, knowledge_kind_memo: true },
+    };
+    const store = new LedgerStore();
+    const refresh = controller(
+      store,
+      new FakeClient(() => Promise.resolve(snapshot), undefined, capabilities, version),
+      snapshot.vault.id,
+    );
+
+    await refresh.refresh(true);
+
+    expect(store.get().connection.phase).toBe("ready");
+    expect(store.get().snapshot?.schemaVersion).toBe(3);
+    expect(store.get().snapshot?.vault.schemaVersion).toBe(7);
+    expect(store.get().snapshot?.knowledge.some((item) => item.kind === "memo")).toBe(true);
+    expect(store.get().capabilities?.features.knowledge_kind_memo).toBe(true);
+    refresh.dispose();
+  });
+
+  it("rejects schema 7 when the memo capability is missing", async () => {
+    const snapshot = memoFixtureSnapshot();
+    const version = { ...VERSION, vaultSchemaVersions: [...VERSION.vaultSchemaVersions, 7] };
+    const store = new LedgerStore();
+    const client = new FakeClient(
+      () => Promise.resolve(snapshot),
+      undefined,
+      CAPABILITIES,
+      version,
+    );
+    const refresh = controller(store, client, snapshot.vault.id);
+
+    await refresh.refresh(true);
+
+    expect(store.get().connection).toMatchObject({
+      phase: "degraded",
+      code: "INCOMPATIBLE",
+      details: { knowledgeKindMemo: false },
+    });
+    expect(client.snapshotCalls).toBe(0);
+    refresh.dispose();
+  });
+
   it("rejects Snapshot schema 1 from a schema 6 document-capable runtime", async () => {
     const current = fixtureSnapshot();
     const legacy = legacyFixtureSnapshot();
@@ -488,10 +540,10 @@ describe("refresh controller", () => {
 
   it.each([
     {
-      label: "does not advertise schema 5 or 6",
+      label: "does not advertise schema 5, 6, or 7",
       version: { ...VERSION, vaultSchemaVersions: [1, 2, 3, 4] },
       expectedDetails: {
-        supportedVaultSchemas: [5, 6],
+        supportedVaultSchemas: [5, 6, 7],
         vaultSchemaVersions: [1, 2, 3, 4],
       },
     },

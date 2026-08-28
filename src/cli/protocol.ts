@@ -8,6 +8,7 @@ export type KnowledgeKind =
   | "technical_note"
   | "essay"
   | "document"
+  | "memo"
   | "note";
 export type KnowledgeStatus = "draft" | "stable" | "archived";
 export type EntityKind = "project" | "task" | "knowledge" | "event" | "report";
@@ -121,7 +122,7 @@ export interface ReportExport {
 }
 
 export interface LedgerSnapshot {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   generatedAt: string;
   vault: {
     id: string;
@@ -434,7 +435,7 @@ function decodeEvent(value: unknown, index: number): LedgerEvent {
 function decodeKnowledge(
   value: unknown,
   index: number,
-  snapshotSchemaVersion: 1 | 2,
+  snapshotSchemaVersion: 1 | 2 | 3,
 ): LedgerKnowledge {
   const item = record(value, `knowledge[${index}]`);
   if ("body" in item) {
@@ -451,7 +452,9 @@ function decodeKnowledge(
       `knowledge[${index}].kind`,
       snapshotSchemaVersion === 1
         ? ["research", "comparison", "technical_note", "essay", "note"]
-        : ["research", "comparison", "technical_note", "essay", "document", "note"],
+        : snapshotSchemaVersion === 2
+          ? ["research", "comparison", "technical_note", "essay", "document", "note"]
+          : ["research", "comparison", "technical_note", "essay", "document", "memo", "note"],
     ),
     status: enumValue(item.status, `knowledge[${index}].status`, [
       "draft",
@@ -501,10 +504,10 @@ function decodeReport(value: unknown, index: number): LedgerReport {
 export function decodeSnapshot(value: unknown): LedgerSnapshot {
   const data = record(envelopeData(value), "snapshot.data");
   const schemaVersion = number(data.snapshot_schema_version, "snapshot.snapshot_schema_version");
-  if (schemaVersion !== 1 && schemaVersion !== 2) {
+  if (schemaVersion !== 1 && schemaVersion !== 2 && schemaVersion !== 3) {
     throw new ProtocolError(`Unsupported snapshot schema: ${schemaVersion}.`);
   }
-  const supportedSchemaVersion: 1 | 2 = schemaVersion;
+  const supportedSchemaVersion: 1 | 2 | 3 = schemaVersion;
   const vault = record(data.vault, "snapshot.vault");
   const source = record(data.source, "snapshot.source");
   const eventWindow = record(data.event_window, "snapshot.event_window");

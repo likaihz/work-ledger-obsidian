@@ -1120,6 +1120,7 @@ function knowledgeKindLabel(value: unknown): string {
     technical_note: "技术笔记",
     essay: "文章",
     document: "文档",
+    memo: "备忘录",
     note: "笔记",
   }[value];
 }
@@ -1141,6 +1142,7 @@ function isKnowledgeKind(value: unknown): value is LedgerKnowledge["kind"] {
     value === "technical_note" ||
     value === "essay" ||
     value === "document" ||
+    value === "memo" ||
     value === "note";
 }
 

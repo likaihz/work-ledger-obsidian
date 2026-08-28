@@ -23,6 +23,7 @@ const REQUIRED_FEATURES = [
 ] as const;
 const LEGACY_VAULT_SCHEMA = 5;
 const DOCUMENT_VAULT_SCHEMA = 6;
+const MEMO_VAULT_SCHEMA = 7;
 
 export interface RuntimeSettings {
   executablePath: string;
@@ -45,8 +46,8 @@ export class RefreshController {
   private readonly auxiliarySlotGenerations = new Map<AuxiliarySlot, number>();
   private debounceTimer: number | null = null;
   private disposed = false;
-  private targetVaultSchema = DOCUMENT_VAULT_SCHEMA;
-  private targetSnapshotSchema: 1 | 2 = 2;
+  private targetVaultSchema = MEMO_VAULT_SCHEMA;
+  private targetSnapshotSchema: 1 | 2 | 3 = 3;
 
   constructor(
     private readonly store: LedgerStore,
@@ -117,12 +118,15 @@ export class RefreshController {
           version.protocolVersion !== 1 ||
           !isCompatibleCliVersion(version.cliVersion) ||
           !version.vaultSchemaVersions.some(
-            (schema) => schema === LEGACY_VAULT_SCHEMA || schema === DOCUMENT_VAULT_SCHEMA,
+            (schema) =>
+              schema === LEGACY_VAULT_SCHEMA ||
+              schema === DOCUMENT_VAULT_SCHEMA ||
+              schema === MEMO_VAULT_SCHEMA,
           )
         ) {
           throw new CliInvocationError(
             "protocol",
-            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5 or 6 support.`,
+            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5, 6, or 7 support.`,
             "INCOMPATIBLE",
             {
               product: version.product,
@@ -132,7 +136,7 @@ export class RefreshController {
               expectedProduct: "work-ledger-cli",
               requiredCliRange: ">=0.11.0,<1.0.0",
               requiredProtocolVersion: 1,
-              supportedVaultSchemas: [LEGACY_VAULT_SCHEMA, DOCUMENT_VAULT_SCHEMA],
+              supportedVaultSchemas: [LEGACY_VAULT_SCHEMA, DOCUMENT_VAULT_SCHEMA, MEMO_VAULT_SCHEMA],
             },
           );
         }
@@ -148,12 +152,18 @@ export class RefreshController {
         );
         const advertisesDocumentKind =
           capabilities.features.knowledge_kind_document === true;
-        const negotiatedVaultSchema = advertisesDocumentKind
-          ? DOCUMENT_VAULT_SCHEMA
-          : LEGACY_VAULT_SCHEMA;
-        const documentCapabilityMismatch =
+        const advertisesMemoKind = capabilities.features.knowledge_kind_memo === true;
+        const negotiatedVaultSchema = advertisesMemoKind
+          ? MEMO_VAULT_SCHEMA
+          : advertisesDocumentKind
+            ? DOCUMENT_VAULT_SCHEMA
+            : LEGACY_VAULT_SCHEMA;
+        const knowledgeKindCapabilityMismatch =
           (version.vaultSchemaVersions.includes(DOCUMENT_VAULT_SCHEMA) &&
             !advertisesDocumentKind) ||
+          (version.vaultSchemaVersions.includes(MEMO_VAULT_SCHEMA) &&
+            (!advertisesDocumentKind || !advertisesMemoKind)) ||
+          (advertisesMemoKind && !advertisesDocumentKind) ||
           !version.vaultSchemaVersions.includes(negotiatedVaultSchema);
         if (
           capabilities.product !== version.product ||
@@ -161,7 +171,7 @@ export class RefreshController {
           capabilities.cliVersion !== version.cliVersion ||
           missingCommands.length > 0 ||
           missingFeatures.length > 0 ||
-          documentCapabilityMismatch
+          knowledgeKindCapabilityMismatch
         ) {
           throw new CliInvocationError(
             "protocol",
@@ -180,12 +190,13 @@ export class RefreshController {
               missingCommands,
               missingFeatures,
               knowledgeKindDocument: capabilities.features.knowledge_kind_document ?? false,
+              knowledgeKindMemo: capabilities.features.knowledge_kind_memo ?? false,
               negotiatedVaultSchema,
             },
           );
         }
         this.targetVaultSchema = negotiatedVaultSchema;
-        this.targetSnapshotSchema = advertisesDocumentKind ? 2 : 1;
+        this.targetSnapshotSchema = advertisesMemoKind ? 3 : advertisesDocumentKind ? 2 : 1;
         requestVersion = version;
         requestCapabilities = capabilities;
         handshakeValidated = true;

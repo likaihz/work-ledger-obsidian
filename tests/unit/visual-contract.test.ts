@@ -434,6 +434,19 @@ describe("selected Work Ledger visual contract", () => {
     expect(view).toContain('`${PLUGIN_DISPLAY_NAME} 尚未连接。`');
   });
 
+  it("presents memo Knowledge with its dedicated Chinese label", () => {
+    const knowledgePage = readFileSync(
+      path.join(packageRoot, "src", "views", "pages", "knowledge-page.ts"),
+      "utf8",
+    );
+    const view = readFileSync(
+      path.join(packageRoot, "src", "views", "work-ledger-view.ts"),
+      "utf8",
+    );
+    expect(knowledgePage).toContain('{ value: "memo", label: "备忘录" }');
+    expect(view).toContain('memo: "备忘录"');
+  });
+
   it("uses the approved global Overview composition", () => {
     const overview = readFileSync(
       path.join(packageRoot, "src", "views", "pages", "overview-page.ts"),
