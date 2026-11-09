@@ -432,7 +432,7 @@ describe("plugin package boundary", () => {
     expect(bundle).toContain("knowledge_documents");
     expect(bundle).toContain("knowledge_kind_document");
     expect(bundle).toContain("knowledge_kind_memo");
-    expect(bundle).toContain("schema 5, 6, or 7 support");
+    expect(bundle).toContain("schema 5, 6, 7, or 8 support");
   });
 
   it("keeps Knowledge selectors correct at the documented scale", () => {

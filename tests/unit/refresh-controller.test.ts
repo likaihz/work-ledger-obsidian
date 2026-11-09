@@ -374,6 +374,43 @@ describe("refresh controller", () => {
     refresh.dispose();
   });
 
+  it.each([7, 8])("accepts actual schema %i through the business schema intersection", async (schema) => {
+    const snapshot = memoFixtureSnapshot();
+    snapshot.vault.schemaVersion = schema;
+    const version = { ...VERSION, vaultSchemaVersions: [...VERSION.vaultSchemaVersions, 7, 8] };
+    const capabilities = {
+      ...CAPABILITIES,
+      features: { ...CAPABILITIES.features, knowledge_kind_memo: true },
+      businessVaultSchemaVersions: [7, 8],
+    };
+    const store = new LedgerStore();
+    const client = new FakeClient(() => Promise.resolve(snapshot), undefined, capabilities, version);
+    const refresh = controller(store, client, snapshot.vault.id);
+    await refresh.refresh(true);
+    expect(store.get().connection.phase).toBe("ready");
+    expect(store.get().snapshot?.vault.schemaVersion).toBe(schema);
+    expect(client.migrationPlanCalls).toBe(0);
+    refresh.dispose();
+  });
+
+  it("does not offer a downgrade when schema 8 is absent from business capabilities", async () => {
+    const snapshot = memoFixtureSnapshot();
+    snapshot.vault.schemaVersion = 8;
+    const version = { ...VERSION, vaultSchemaVersions: [...VERSION.vaultSchemaVersions, 7, 8] };
+    const capabilities = {
+      ...CAPABILITIES,
+      features: { ...CAPABILITIES.features, knowledge_kind_memo: true },
+      businessVaultSchemaVersions: [7],
+    };
+    const store = new LedgerStore();
+    const client = new FakeClient(() => Promise.resolve(snapshot), undefined, capabilities, version);
+    const refresh = controller(store, client, snapshot.vault.id);
+    await refresh.refresh(true);
+    expect(store.get().connection.phase).not.toBe("ready");
+    expect(client.migrationPlanCalls).toBe(0);
+    refresh.dispose();
+  });
+
   it("rejects schema 7 when the memo capability is missing", async () => {
     const snapshot = memoFixtureSnapshot();
     const version = { ...VERSION, vaultSchemaVersions: [...VERSION.vaultSchemaVersions, 7] };
@@ -543,7 +580,7 @@ describe("refresh controller", () => {
       label: "does not advertise schema 5, 6, or 7",
       version: { ...VERSION, vaultSchemaVersions: [1, 2, 3, 4] },
       expectedDetails: {
-        supportedVaultSchemas: [5, 6, 7],
+        supportedVaultSchemas: [5, 6, 7, 8],
         vaultSchemaVersions: [1, 2, 3, 4],
       },
     },

@@ -195,7 +195,9 @@ function initializeVault(root: string): string {
 }
 
 function generateKnowledgeSnapshot(root: string): unknown {
-  initializeVault(root);
+  const vault = initializeVault(root);
+  // Retain schema 7 as a compatibility fixture alongside schema 8 tests.
+  writeFileSync(path.join(vault, "Work", ".work-ledger.json"), '{"schema_version":7}\n', "utf8");
   const setup = run(root, [
     "apply",
     "--request-file",

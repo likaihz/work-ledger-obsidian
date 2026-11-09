@@ -26,6 +26,7 @@ export interface CapabilityInfo {
   protocolVersion: number;
   commands: ReadonlySet<string>;
   features: Readonly<Record<string, boolean>>;
+  businessVaultSchemaVersions?: number[];
 }
 
 export interface LedgerProject {
@@ -328,6 +329,10 @@ export function decodeCapabilities(value: unknown): CapabilityInfo {
     protocolVersion: number(data.protocol_version, "capabilities.protocol_version"),
     commands: new Set(strings(data.commands, "capabilities.commands")),
     features,
+    businessVaultSchemaVersions: data.business_vault_schema_versions === undefined ? undefined
+      : array(data.business_vault_schema_versions, "capabilities.business_vault_schema_versions").map(
+          (item, index) => number(item, `capabilities.business_vault_schema_versions[${index}]`),
+        ),
   };
 }
 

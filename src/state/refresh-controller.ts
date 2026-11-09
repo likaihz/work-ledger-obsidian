@@ -24,6 +24,7 @@ const REQUIRED_FEATURES = [
 const LEGACY_VAULT_SCHEMA = 5;
 const DOCUMENT_VAULT_SCHEMA = 6;
 const MEMO_VAULT_SCHEMA = 7;
+const PROFILE_VAULT_SCHEMA = 8;
 
 export interface RuntimeSettings {
   executablePath: string;
@@ -47,6 +48,7 @@ export class RefreshController {
   private debounceTimer: number | null = null;
   private disposed = false;
   private targetVaultSchema = MEMO_VAULT_SCHEMA;
+  private acceptedVaultSchemas = [MEMO_VAULT_SCHEMA];
   private targetSnapshotSchema: 1 | 2 | 3 = 3;
 
   constructor(
@@ -121,12 +123,12 @@ export class RefreshController {
             (schema) =>
               schema === LEGACY_VAULT_SCHEMA ||
               schema === DOCUMENT_VAULT_SCHEMA ||
-              schema === MEMO_VAULT_SCHEMA,
+              schema === MEMO_VAULT_SCHEMA || schema === PROFILE_VAULT_SCHEMA,
           )
         ) {
           throw new CliInvocationError(
             "protocol",
-            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5, 6, or 7 support.`,
+            `Incompatible work-ledger ${version.cliVersion}; expected >=0.11.0,<1.0.0 with protocol 1 and schema 5, 6, 7, or 8 support.`,
             "INCOMPATIBLE",
             {
               product: version.product,
@@ -136,7 +138,7 @@ export class RefreshController {
               expectedProduct: "work-ledger-cli",
               requiredCliRange: ">=0.11.0,<1.0.0",
               requiredProtocolVersion: 1,
-              supportedVaultSchemas: [LEGACY_VAULT_SCHEMA, DOCUMENT_VAULT_SCHEMA, MEMO_VAULT_SCHEMA],
+              supportedVaultSchemas: [LEGACY_VAULT_SCHEMA, DOCUMENT_VAULT_SCHEMA, MEMO_VAULT_SCHEMA, PROFILE_VAULT_SCHEMA],
             },
           );
         }
@@ -195,7 +197,17 @@ export class RefreshController {
             },
           );
         }
-        this.targetVaultSchema = negotiatedVaultSchema;
+        this.acceptedVaultSchemas = capabilities.businessVaultSchemaVersions === undefined
+          ? [negotiatedVaultSchema]
+          : capabilities.businessVaultSchemaVersions.filter((schema) =>
+              version.vaultSchemaVersions.includes(schema) &&
+              (schema === negotiatedVaultSchema ||
+                (advertisesMemoKind && advertisesDocumentKind && schema === PROFILE_VAULT_SCHEMA)),
+            );
+        if (this.acceptedVaultSchemas.length === 0) {
+          throw new CliInvocationError("protocol", "No compatible business Vault schema.", "INCOMPATIBLE");
+        }
+        this.targetVaultSchema = Math.min(...this.acceptedVaultSchemas);
         this.targetSnapshotSchema = advertisesMemoKind ? 3 : advertisesDocumentKind ? 2 : 1;
         requestVersion = version;
         requestCapabilities = capabilities;
@@ -246,12 +258,12 @@ export class RefreshController {
         );
         return;
       }
-      if (snapshot.vault.schemaVersion !== this.targetVaultSchema) {
+      if (!this.acceptedVaultSchemas.includes(snapshot.vault.schemaVersion)) {
         this.client = null;
-        this.migrationClient = handshakeValidated ? requestClient : null;
+        this.migrationClient = handshakeValidated && snapshot.vault.schemaVersion < this.targetVaultSchema ? requestClient : null;
         this.handshakeValid = false;
         this.store.clearBusinessState(
-          `Vault schema ${snapshot.vault.schemaVersion} requires migration to schema ${this.targetVaultSchema}.`,
+          `Vault schema ${snapshot.vault.schemaVersion} is not supported by this runtime; supported schemas: ${this.acceptedVaultSchemas.join(", ")}.`,
           "MIGRATION_REQUIRED",
           {
             currentVersion: snapshot.vault.schemaVersion,
