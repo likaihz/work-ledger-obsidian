@@ -22,6 +22,16 @@ function memoFixture(): Record<string, unknown> {
 }
 
 describe("snapshot protocol", () => {
+  it("rejects impossible calendar dates without rejecting null dates or valid leap days", () => {
+    const raw = memoFixture(), data = raw.data as { tasks: Array<Record<string, unknown>> };
+    for (const invalid of ["2026-02-29", "2026-04-31", "0000-01-01", "2026-13-01", "2026-1-01"]) {
+      data.tasks[0]!.due_date = invalid;
+      expect(() => decodeSnapshot(raw)).toThrow(ProtocolError);
+    }
+    data.tasks[0]!.due_date = "2028-02-29";
+    data.tasks[0]!.planned_for = null;
+    expect(decodeSnapshot(raw).tasks[0]?.dueDate).toBe("2028-02-29");
+  });
   it("decodes schema 1, thought events, and Knowledge fields into camelCase", () => {
     const snapshot = decodeSnapshot(fixture());
     const project = snapshot.projects.find((item) => item.title === "Work Ledger 插件");

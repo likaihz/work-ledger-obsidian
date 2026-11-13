@@ -1,3 +1,5 @@
+import { ProjectsWorkspaceView } from "../projects/workspace-view";
+import type { PreferencesRepository } from "../projects/preferences";
 import {
   Component,
   ItemView,
@@ -51,6 +53,7 @@ export interface WorkLedgerViewHost {
   app: App;
   store: LedgerStore;
   settings: WorkLedgerSettings;
+  preferences: PreferencesRepository | null;
   controller(): RefreshController | null;
   saveRoute(route: WorkLedgerRoute): Promise<void>;
 }
@@ -65,6 +68,7 @@ const NAVIGATION: Array<{ route: WorkLedgerRoute; label: string; icon: string }>
 ];
 
 export class WorkLedgerView extends ItemView {
+  private readonly projects: ProjectsWorkspaceView;
   private unsubscribe: (() => void) | null = null;
   private route: WorkLedgerRoute;
   private searchQuery = "";
@@ -79,6 +83,7 @@ export class WorkLedgerView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private readonly host: WorkLedgerViewHost) {
     super(leaf);
+    this.projects = new ProjectsWorkspaceView(host);
     this.route = host.settings.lastRoute || host.settings.defaultView;
   }
 
@@ -133,6 +138,7 @@ export class WorkLedgerView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.projects.unmount();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.clearInspectorMarkdown();
@@ -160,6 +166,19 @@ export class WorkLedgerView extends ItemView {
   }
 
   private render(state: LedgerState): void {
+    if (this.route === "projects" && !this.host.settings.useLegacyProjects) {
+      if (this.renderedRoute !== "projects" || !this.contentEl.querySelector(".wl-projects")) {
+        this.clearInspectorMarkdown();
+        const root = this.contentEl; root.empty(); root.addClass("work-ledger-root");
+        this.renderTopbar(root);
+        const shell = root.createDiv({ cls: "work-ledger-project-shell" });
+        this.projects.mount(shell, state);
+      } else this.projects.update(state);
+      this.renderedState = state; this.renderedRoute = this.route;
+      return;
+    }
+    this.projects.update(state);
+    if (this.contentEl.querySelector(".wl-projects")) this.projects.unmount();
     if (
       canPatchKnowledgeInspector(
         this.renderedRoute,

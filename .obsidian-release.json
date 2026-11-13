@@ -1,0 +1,11 @@
+{
+  "assets": {
+    "main.js": "7ba9896c29fc9d137acc792d767fe2a5d20590d7fd87cd84a61dd570e41e650a",
+    "manifest.json": "34084ce54918c8d8ad0092a7111af052b0fb918d81fbc93ff7ee9a6db8d1ab20",
+    "styles.css": "e491b71c843fd40106d595193a2c35adf85085980b0676d376b0cd608f55b356"
+  },
+  "schema_version": 1,
+  "snapshot_manifest_sha256": "d946ac395b245bb0b3abb7788059e4060d8d06272c3bf6ba8cc1c0228437d248",
+  "source_sha": "9e40b43afdbe2fd3dfa3f8af945630a45b7862c3",
+  "version": "0.1.10"
+}

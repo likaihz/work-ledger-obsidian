@@ -1443,3 +1443,44 @@ describe("refresh controller", () => {
     expect(store.get().detailLoading).toBeNull();
   });
 });
+
+
+describe("VEN-84 scoped details and connection epoch / AC-11,14,20", () => {
+  it("does not cancel one Leaf when another requests a different object", async () => {
+    const snapshot = fixtureSnapshot(), store = new LedgerStore();
+    const client = new FakeClient(() => Promise.resolve(snapshot));
+    const requests: Array<{ id: string; signal?: AbortSignal; resolve: (value: Record<string, unknown>) => void }> = [];
+    client.taskShow = (id: string, signal?: AbortSignal) => new Promise((resolve) => requests.push({ id, signal, resolve }));
+    const controller = new RefreshController(store, () => ({ executablePath: "/fake", eventLookbackDays: 35 }), () => Promise.resolve(snapshot.vault.id), () => client);
+    await controller.start();
+    const first = snapshot.tasks[0]!, second = snapshot.tasks[1]!;
+    const a = controller.readScopedDetail({ kind: "task", id: first.id }, new AbortController().signal);
+    const b = controller.readScopedDetail({ kind: "task", id: second.id }, new AbortController().signal);
+    expect(requests[0]!.signal?.aborted).toBe(false);
+    requests[1]!.resolve({ id: second.id, revision: second.revision, body: "second" });
+    requests[0]!.resolve({ id: first.id, revision: first.revision, body: "first" });
+    expect(await a).toMatchObject({ body: "first" }); expect(await b).toMatchObject({ body: "second" }); controller.dispose();
+  });
+  it("checks the response revision and retries after at most one merged refresh", async () => {
+    const snapshot = fixtureSnapshot(), store = new LedgerStore();
+    const client = new FakeClient(() => Promise.resolve(snapshot));
+    const task = snapshot.tasks[0]!; let shows = 0;
+    client.taskShow = () => { shows++; return Promise.resolve({ id: task.id, revision: `sha256:${"9".repeat(64)}`, body: "wrong revision" }); };
+    const controller = new RefreshController(store, () => ({ executablePath: "/fake", eventLookbackDays: 35 }), () => Promise.resolve(snapshot.vault.id), () => client);
+    await controller.start();
+    await expect(controller.readScopedDetail({ kind: "task", id: task.id }, new AbortController().signal)).rejects.toThrow(/持续更新/);
+    expect(shows).toBe(2); expect(client.snapshotCalls).toBe(2); expect(store.getDetail({ kind: "task", id: task.id })).toBeNull(); controller.dispose();
+  });
+  it("clears the old snapshot synchronously at reconnect and discards a late body", async () => {
+    const snapshot = fixtureSnapshot(), store = new LedgerStore();
+    const client = new FakeClient(() => Promise.resolve(snapshot));
+    let resolveBody!: (value: Record<string, unknown>) => void;
+    client.taskShow = () => new Promise((resolve) => { resolveBody = resolve; });
+    const controller = new RefreshController(store, () => ({ executablePath: "/fake", eventLookbackDays: 35 }), () => Promise.resolve(snapshot.vault.id), () => client);
+    await controller.start(); const task = snapshot.tasks[0]!;
+    const detail = controller.readScopedDetail({ kind: "task", id: task.id }, new AbortController().signal);
+    const reconnect = controller.reconnect(); expect(store.get().snapshot).toBeNull();
+    resolveBody({ id: task.id, revision: task.revision, body: "old identity" });
+    await expect(detail).rejects.toThrow(/过期/); await reconnect; controller.dispose();
+  });
+});

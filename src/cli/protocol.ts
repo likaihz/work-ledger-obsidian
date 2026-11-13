@@ -1,3 +1,5 @@
+import { isCalendarDate } from "../projects/dates";
+
 export type ProjectStatus = "active" | "archived";
 export type TaskStatus = "inbox" | "planned" | "in_progress" | "blocked" | "done" | "cancelled";
 export type Priority = "P0" | "P1" | "P2" | "P3";
@@ -197,6 +199,12 @@ function optionalString(value: unknown, label: string): string | null {
   return string(value, label);
 }
 
+function calendarDate(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  if (!isCalendarDate(value)) throw new ProtocolError(`${label} must be a valid calendar date.`);
+  return value;
+}
+
 function number(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new ProtocolError(`${label} must be an integer.`);
@@ -390,8 +398,8 @@ function decodeTask(value: unknown, index: number): LedgerTask {
       `tasks[${index}].effective_visibility`,
       ["private", "reportable"],
     ),
-    plannedFor: optionalString(item.planned_for, `tasks[${index}].planned_for`),
-    dueDate: optionalString(item.due_date, `tasks[${index}].due_date`),
+    plannedFor: calendarDate(item.planned_for, `tasks[${index}].planned_for`),
+    dueDate: calendarDate(item.due_date, `tasks[${index}].due_date`),
     tags: strings(item.tags, `tasks[${index}].tags`),
     createdAt: timestamp(item.created_at, `tasks[${index}].created_at`),
     updatedAt: timestamp(item.updated_at, `tasks[${index}].updated_at`),

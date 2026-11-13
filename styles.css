@@ -2506,3 +2506,77 @@
     transition: none !important;
   }
 }
+
+/* Project workspace: host typography and colours, scoped to each Leaf. */
+.work-ledger-project-shell { flex: 1; min-height: 0; overflow: hidden; }
+.wl-projects { height: 100%; min-height: 0; display: flex; flex-direction: column; position: relative; container-type: inline-size; font-size: var(--font-ui-small); color: var(--text-normal); }
+.wl-project-toolbar { display: flex; align-items: center; gap: var(--size-4-1); flex-wrap: wrap; padding: var(--size-4-3); flex-shrink: 0; }
+.wl-project-toolbar button, .wl-project-panel button, .wl-project-dialog button, .wl-project-inspector button { font-size: inherit; min-height: 32px; white-space: normal; height: auto; }
+.wl-project-toolbar button { display: inline-flex; align-items: center; gap: var(--size-2-2); box-shadow: none; flex-shrink: 0; }
+.wl-project-toolbar button.is-active { color: var(--text-accent); border-bottom: 2px solid var(--interactive-accent); }
+.wl-project-toolbar svg { width: var(--icon-s); height: var(--icon-s); }
+.wl-project-toolbar input { width: 144px; min-width: 90px; }
+.wl-project-toolbar select { max-width: 125px; }
+.wl-toolbar-space { flex: 1; }
+.wl-result-count { white-space: nowrap; color: var(--text-muted); }
+.wl-project-toolbar .wl-filter-trigger { position: relative; }
+.wl-filter-trigger > span:last-child { display: none; }
+.wl-filter-trigger.is-active::after { content: attr(data-count); position: absolute; right: -5px; top: -5px; border-radius: 1em; padding: 0 4px; background: var(--interactive-accent); color: var(--text-on-accent); font-size: var(--font-ui-smaller); }
+.wl-project-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.wl-project-results { flex: 1; min-width: 0; min-height: 0; padding: 0 var(--size-4-3) var(--size-4-3); overflow: auto; display: flex; flex-direction: column; }
+.wl-project-message { padding: var(--size-2-2) var(--size-4-3); color: var(--text-muted); border-bottom: 1px solid var(--background-modifier-border); flex-shrink: 0; overflow-wrap: anywhere; }
+.wl-project-message[hidden], .wl-project-inspector[hidden], .wl-date-range[hidden], .wl-check[hidden] { display: none; }
+.wl-board { display: flex; flex: 1; gap: var(--size-4-3); overflow-x: auto; min-height: 0; }
+.wl-board-column { flex: 0 0 252px; background: var(--background-secondary); border-radius: var(--radius-m); display: flex; flex-direction: column; min-height: 0; padding: var(--size-4-3); }
+.wl-board-column h3 { margin: 0 0 var(--size-4-3); font-weight: var(--font-normal); font-size: inherit; }
+.wl-virtual { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overflow-anchor: none; }
+.wl-spacer { height: var(--wl-space-height, 0px); pointer-events: none; }
+.wl-task-row { position: relative; padding: var(--size-4-2) var(--size-4-3); padding-left: calc(var(--size-4-3) + var(--wl-depth, 0) * 20px); border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; outline-offset: -2px; }
+.wl-task-card { padding: var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); background: var(--background-primary); margin-bottom: 8px; }
+.wl-task-copy { display: flex; flex-direction: column; gap: var(--size-2-2); overflow-wrap: anywhere; min-width: 0; }
+.wl-task-project, .wl-task-date, .wl-task-meta { font-size: var(--font-ui-smaller); line-height: 1.4; }
+.wl-task-project, .wl-task-date { color: var(--text-muted); }
+.wl-task-title { line-height: 1.5; }
+.wl-task-row:hover { background: var(--background-modifier-hover); }
+.wl-task-row.is-selected { background: var(--background-modifier-active-hover); }
+.wl-task-row.is-context { border-left: 2px dashed var(--background-modifier-border); }
+.wl-projects :focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+.wl-projects .wl-tree-toggle { position: absolute; left: calc(var(--wl-depth, 0) * 20px); top: 8px; padding: 0; width: 24px; height: 24px; box-shadow: none; background: transparent; }
+.wl-task-row[role="treeitem"] { padding-left: calc(28px + var(--wl-depth, 0) * 20px); }
+.wl-list-group { font-weight: var(--font-semibold); padding: var(--size-4-2) 0; color: var(--text-muted); }
+.wl-project-panel { position: absolute; z-index: 20; left: var(--wl-panel-left); top: var(--wl-panel-top); width: min(370px, 100%); max-height: calc(100% - var(--wl-panel-top) - 8px); overflow: auto; padding: var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); background: var(--background-primary); box-shadow: var(--shadow-s); }
+.wl-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--size-4-2); margin-bottom: var(--size-4-2); }
+.wl-project-panel fieldset { margin: var(--size-4-2) 0; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
+.wl-check { display: inline-flex; align-items: center; gap: var(--size-2-2); padding: var(--size-2-2); overflow-wrap: anywhere; }
+.wl-panel-options { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.wl-date-range { display: flex; gap: var(--size-2-2); flex-wrap: wrap; padding-top: var(--size-2-2); }
+.wl-date-range input { width: 135px; }
+.wl-project-inspector { flex: 0 0 340px; overflow: auto; padding: var(--size-4-3); border-left: 1px solid var(--background-modifier-border); background: var(--background-primary); }
+.wl-project-inspector button { max-width: 100%; margin: var(--size-2-2); text-align: start; overflow-wrap: anywhere; }
+.wl-project-inspector h2 { font-size: var(--font-ui-medium); overflow-wrap: anywhere; }
+.wl-project-index-row, .wl-saved-row { display: flex; flex-wrap: wrap; gap: var(--size-4-2); padding: var(--size-4-3); border-bottom: 1px solid var(--background-modifier-border); }
+.wl-project-dialog { max-width: min(500px, 90vw); max-height: 85vh; overflow: auto; background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-l); padding: var(--size-4-4); }
+.wl-project-dialog::backdrop { background: var(--background-modifier-cover); }
+.wl-project-dialog button { margin: var(--size-4-2); }
+.wl-confirm-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+@container (max-width: 900px) {
+  .wl-project-inspector { position: absolute; inset: 0 0 0 auto; width: min(420px, 100%); z-index: 10; }
+  .wl-toolbar-space { display: none; }
+}
+@container (max-width: 720px) {
+  .wl-project-toolbar { gap: var(--size-2-2); padding: var(--size-4-2); }
+  .wl-project-toolbar button { min-height: 34px; }
+}
+.wl-task-grid, .wl-list-headings { display: grid; grid-template-columns: minmax(150px, 1fr) 128px 66px 54px 90px 90px; gap: var(--size-4-3); align-items: center; }
+.wl-list-headings { flex-shrink: 0; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: var(--size-4-2) var(--size-4-3); border-bottom: 1px solid var(--background-modifier-border); }
+.wl-task-grid .wl-task-copy { gap: var(--size-2-1); }
+.wl-task-grid .wl-task-status { font-size: var(--font-ui-smaller); }
+.wl-list-group { grid-column: 1 / -1; }
+@container (max-width: 900px) {
+  .wl-task-grid { grid-template-columns: minmax(120px, 1fr) minmax(100px, 140px); }
+  .wl-task-grid .wl-task-copy { grid-column: 1 / -1; }
+  .wl-list-headings { display: none; }
+}
+@container (max-width: 720px) {
+  .wl-task-grid > .wl-task-date::before { content: attr(data-label); }
+}

@@ -1,6 +1,6 @@
 {
   "name": "agent-ledger-obsidian",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Read-only Agent Ledger visualization of Work Ledger data in Obsidian",
   "main": "main.js",
   "type": "module",

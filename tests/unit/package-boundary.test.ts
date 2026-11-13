@@ -36,6 +36,7 @@ function typescriptSources(root: string): Record<string, string> {
 
 const APPROVED_CHILD_PROCESS_IMPORT = 'import { execFile } from "node:child_process";';
 const APPROVED_FS_IMPORT = 'import { realpath } from "node:fs/promises";';
+const APPROVED_PREFERENCE_FS_IMPORT = 'import { promises as fs } from "node:fs";';
 
 function productImportViolations(sources: Readonly<Record<string, string>>): string[] {
   const violations: string[] = [];
@@ -74,9 +75,9 @@ function productImportViolations(sources: Readonly<Record<string, string>>): str
     }
   }
   if (
-    fsImports.length !== 1 ||
-    fsImports[0]?.file !== "src/obsidian/vault-identity.ts" ||
-    fsImports[0]?.statement !== APPROVED_FS_IMPORT
+    fsImports.length !== 2 ||
+    !fsImports.some((item) => item.file === "src/obsidian/vault-identity.ts" && item.statement === APPROVED_FS_IMPORT) ||
+    !fsImports.some((item) => item.file === "src/projects/preferences.ts" && item.statement === APPROVED_PREFERENCE_FS_IMPORT)
   ) {
     violations.push("node-fs-surface");
   }
@@ -209,7 +210,10 @@ describe("plugin package boundary", () => {
       /import\s*\{[^}]*\b(?:exec|execSync|spawn|spawnSync)\b[^}]*\}\s*from\s*"node:child_process"/,
     );
     expect(source).not.toMatch(/\bshell\s*:\s*true\b/);
-    expect(source).not.toMatch(
+    // The sole writer is confined to the plugin's fixed JSON preference path,
+    // covered with real-filesystem traversal/symlink and failure-injection tests.
+    const businessSources = Object.entries(sources).filter(([file]) => file !== "src/projects/preferences.ts").map(([, content]) => content).join("\n");
+    expect(businessSources).not.toMatch(
       /\b(?:readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync)\s*\(/,
     );
     expect(source).not.toMatch(
@@ -221,6 +225,7 @@ describe("plugin package boundary", () => {
     const approved = {
       "src/cli/client.ts": APPROVED_CHILD_PROCESS_IMPORT,
       "src/obsidian/vault-identity.ts": APPROVED_FS_IMPORT,
+      "src/projects/preferences.ts": APPROVED_PREFERENCE_FS_IMPORT,
     };
     expect(productImportViolations(approved)).toEqual([]);
 
@@ -294,6 +299,7 @@ describe("plugin package boundary", () => {
         productImportViolations({
           "src/cli/client.ts": probe,
           "src/obsidian/vault-identity.ts": APPROVED_FS_IMPORT,
+          "src/projects/preferences.ts": APPROVED_PREFERENCE_FS_IMPORT,
         }),
       ).toContain("child-process-surface");
     }
@@ -301,6 +307,7 @@ describe("plugin package boundary", () => {
       productImportViolations({
         "src/cli/probe.ts": APPROVED_CHILD_PROCESS_IMPORT,
         "src/obsidian/vault-identity.ts": APPROVED_FS_IMPORT,
+        "src/projects/preferences.ts": APPROVED_PREFERENCE_FS_IMPORT,
       }),
     ).toContain("child-process-surface");
     for (const extension of ["tsx", "mts", "cts"]) {
@@ -317,6 +324,7 @@ describe("plugin package boundary", () => {
     const approved = {
       "src/cli/client.ts": APPROVED_CHILD_PROCESS_IMPORT,
       "src/obsidian/vault-identity.ts": APPROVED_FS_IMPORT,
+      "src/projects/preferences.ts": APPROVED_PREFERENCE_FS_IMPORT,
     };
     for (const probe of [
       'export { readFile } from "node:fs";',
@@ -362,6 +370,7 @@ describe("plugin package boundary", () => {
       productImportViolations({
         "src/cli/client.ts": 'export { execFile } from "node:child_process"',
         "src/obsidian/vault-identity.ts": APPROVED_FS_IMPORT,
+        "src/projects/preferences.ts": APPROVED_PREFERENCE_FS_IMPORT,
       }),
     ).toContain("child-process-surface");
   });
@@ -426,8 +435,9 @@ describe("plugin package boundary", () => {
       );
     }
     for (const packaged of [bundle, manifest]) {
-      expect(packaged).not.toMatch(/\b(?:apply|sync|report write|migrate apply)\b/);
-      expect(packaged).not.toMatch(/(?:readFile|writeFile).*\.md/);
+      // CLI mutations are string command tokens, not the fs FileHandle.sync method.
+      expect(packaged).not.toMatch(/["'](?:apply|sync|report write|migrate apply)["']/);
+      expect(packaged).not.toMatch(/(?:readFile|writeFile)\([^)]*["'][^"']*\.md["']/);
     }
     expect(bundle).toContain("knowledge_documents");
     expect(bundle).toContain("knowledge_kind_document");

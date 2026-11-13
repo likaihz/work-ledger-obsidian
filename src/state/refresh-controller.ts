@@ -36,6 +36,45 @@ export type LedgerClientFactory = (settings: RuntimeSettings) => LedgerReadClien
 
 export class RefreshController {
   private client: LedgerReadClient | null = null;
+  private identityEpoch = 0;
+  private readonly scopedDetails = new Map<string, Readonly<Record<string, unknown>>>();
+  private detailRefresh: Promise<void> | null = null;
+
+  reconnect(): Promise<void> {
+    this.identityEpoch++;
+    this.scopedDetails.clear();
+    this.store.clearBusinessState("正在验证 Vault 连接…");
+    return this.refresh(true);
+  }
+
+  /** Leaf-owned requests never cancel another Leaf's selection. Cache bodies only at an exact revision. */
+  async readScopedDetail(ref: EntityRef, signal: AbortSignal, retry = true): Promise<Readonly<Record<string, unknown>>> {
+    const client = this.currentReaderClient(), snapshot = this.store.get().snapshot;
+    const revision = revisionFor(snapshot, ref), epoch = this.identityEpoch, generation = this.generation;
+    if (!client || !snapshot || !revision || signal.aborted) throw new Error("详情当前不可用，请重试");
+    const key = `${epoch}:${snapshot.vault.id}:${detailKey(ref, revision)}`;
+    const cached = this.scopedDetails.get(key);
+    if (cached) { this.scopedDetails.delete(key); this.scopedDetails.set(key, cached); return cached; }
+    const detail = ref.kind === "task" ? await client.taskShow(ref.id, signal)
+      : ref.kind === "project" ? await client.projectShow(ref.id, signal)
+      : ref.kind === "knowledge" ? await client.knowledgeShow(ref.id, signal)
+      : ref.kind === "event" ? await client.eventShow(ref.id, "effective", signal) : {};
+    if (signal.aborted || epoch !== this.identityEpoch || generation !== this.generation || this.disposed
+      || this.store.get().snapshot?.vault.id !== snapshot.vault.id) throw new Error("详情读取已过期，请重试");
+    if (detail.id !== ref.id || (ref.kind !== "event" && detail.revision !== revision)
+      || revisionFor(this.store.get().snapshot, ref) !== revision) {
+      if (retry) {
+        this.detailRefresh ??= this.refresh(false).finally(() => { this.detailRefresh = null; });
+        await this.detailRefresh;
+        return this.readScopedDetail(ref, signal, false);
+      }
+      throw new Error("数据持续更新中，正文版本与列表不一致，请手动重试");
+    }
+    this.scopedDetails.set(key, detail);
+    while (this.scopedDetails.size > 20) this.scopedDetails.delete(this.scopedDetails.keys().next().value!);
+    return detail;
+  }
+
   private migrationClient: LedgerReadClient | null = null;
   private handshakeValid = false;
   private generation = 0;
@@ -225,7 +264,9 @@ export class RefreshController {
       if (requestGeneration !== this.generation || controller.signal.aborted) {
         return;
       }
-      const expectedVaultId = await this.expectedVaultId();
+      let expectedVaultId: string;
+      try { expectedVaultId = await this.expectedVaultId(); }
+      catch { throw new CliInvocationError("configuration", "Cannot verify the current Vault identity.", "IDENTITY_UNKNOWN"); }
       if (requestGeneration !== this.generation || controller.signal.aborted) {
         return;
       }
@@ -233,6 +274,7 @@ export class RefreshController {
         this.client = null;
         this.migrationClient = null;
         this.handshakeValid = false;
+        this.scopedDetails.clear();
         this.store.clearBusinessState(
           "The configured work-ledger Vault is not the currently open Obsidian Vault.",
           "VAULT_MISMATCH",
@@ -247,6 +289,7 @@ export class RefreshController {
         this.client = null;
         this.migrationClient = null;
         this.handshakeValid = false;
+        this.scopedDetails.clear();
         this.store.clearBusinessState(
           `Snapshot schema ${snapshot.schemaVersion} is incompatible with Vault schema ${this.targetVaultSchema}.`,
           "INCOMPATIBLE",
@@ -262,6 +305,7 @@ export class RefreshController {
         this.client = null;
         this.migrationClient = handshakeValidated && snapshot.vault.schemaVersion < this.targetVaultSchema ? requestClient : null;
         this.handshakeValid = false;
+        this.scopedDetails.clear();
         this.store.clearBusinessState(
           `Vault schema ${snapshot.vault.schemaVersion} is not supported by this runtime; supported schemas: ${this.acceptedVaultSchemas.join(", ")}.`,
           "MIGRATION_REQUIRED",
@@ -305,7 +349,7 @@ export class RefreshController {
         this.handshakeValid = false;
       }
       const failClosed =
-        failure.code === "INCOMPATIBLE" || failure.code === "MIGRATION_REQUIRED";
+        failure.code === "INCOMPATIBLE" || failure.code === "MIGRATION_REQUIRED" || failure.code === "IDENTITY_UNKNOWN";
       if (previous && !failClosed) {
         this.store.setConnection({
           phase: "stale",
@@ -316,6 +360,7 @@ export class RefreshController {
           staleSince: new Date().toISOString(),
         });
       } else {
+        this.scopedDetails.clear();
         this.store.clearBusinessState(failure.message, failure.code, failure.details);
       }
     } finally {
@@ -499,6 +544,8 @@ export class RefreshController {
 
   dispose(): void {
     this.disposed = true;
+    this.identityEpoch++;
+    this.scopedDetails.clear();
     this.generation += 1;
     this.invalidateDetailRequests();
     this.invalidateAuxiliaryRequests();

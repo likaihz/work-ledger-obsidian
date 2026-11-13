@@ -83,7 +83,7 @@ describe("ledger CLI process boundary", () => {
     const client = new LedgerCliClient({ executablePath: script, timeoutMs: 10_000 });
 
     await expect(client.version()).rejects.toMatchObject({
-      kind: "output",
+      kind: "output", code: "CLI_OUTPUT_LIMIT",
     });
   });
 

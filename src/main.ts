@@ -1,3 +1,5 @@
+import { FileSystemAdapter } from "obsidian";
+import { preferenceIO, PreferencesRepository } from "./projects/preferences";
 import { Notice, Plugin, type TAbstractFile, type WorkspaceLeaf } from "obsidian";
 
 import {
@@ -21,10 +23,15 @@ import {
 export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHost {
   settings: WorkLedgerSettings = DEFAULT_SETTINGS;
   readonly store = new LedgerStore();
+  preferences: PreferencesRepository | null = null;
   private refreshController: RefreshController | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    if (this.app.vault.adapter instanceof FileSystemAdapter) {
+      this.preferences = new PreferencesRepository(preferenceIO(this.app.vault.adapter.getBasePath(), this.app.vault.configDir, this.manifest.id));
+      this.register(this.store.subscribe((state) => this.preferences?.bind(state.snapshot?.vault.id ?? null)));
+    }
     this.registerView(
       WORK_LEDGER_VIEW_TYPE,
       (leaf: WorkspaceLeaf) => new WorkLedgerView(leaf, this),
@@ -109,10 +116,10 @@ export default class WorkLedgerPlugin extends Plugin implements WorkLedgerViewHo
   }
 
   async saveSettingsAndReconnect(): Promise<void> {
+    // Clear the old identity before the first asynchronous settings write.
+    const reconnect = this.refreshController?.reconnect();
     await this.saveSettings();
-    if (this.refreshController) {
-      await this.refreshController.refresh(true);
-    }
+    await reconnect;
   }
 
   async saveRoute(route: WorkLedgerRoute): Promise<void> {

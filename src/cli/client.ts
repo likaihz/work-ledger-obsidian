@@ -150,6 +150,10 @@ export class LedgerCliClient implements LedgerReadClient {
           signal,
         },
         (error, stdout, stderr) => {
+          if (error && "code" in error && error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+            reject(new CliInvocationError("output", "读取未完成：CLI 输出超过 16 MiB。", "CLI_OUTPUT_LIMIT"));
+            return;
+          }
           let payload: unknown;
           try {
             payload = parseSingleJson(stdout);
@@ -163,7 +167,7 @@ export class LedgerCliClient implements LedgerReadClient {
               return;
             }
             if (error && "killed" in error && error.killed) {
-              reject(new CliInvocationError("timeout", "work-ledger exceeded the allowed execution time."));
+              reject(new CliInvocationError("timeout", "读取未完成：work-ledger exceeded the allowed execution time."));
               return;
             }
             const diagnostic = redactStderr(stderr);

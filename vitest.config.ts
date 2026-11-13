@@ -11,10 +11,11 @@ export default defineConfig({
         return id === "\0obsidian-test-runtime"
           ? [
               "export class ItemView {}",
+              "export class Component { load() {} unload() {} }",
               "export class MarkdownView {}",
               "export class Notice {}",
               "export class TFile {}",
-              "export const MarkdownRenderer = { render() {} };",
+              "export const MarkdownRenderer = { render(app, text, element) { element.textContent = text; } };",
               "export function setIcon() {}",
             ].join("\n")
           : null;

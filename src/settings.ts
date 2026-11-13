@@ -15,6 +15,7 @@ export interface SavedFilter {
 
 export interface WorkLedgerSettings {
   executablePath: string;
+  useLegacyProjects: boolean;
   configPath?: string;
   defaultView: WorkLedgerRoute;
   eventLookbackDays: number;
@@ -24,6 +25,7 @@ export interface WorkLedgerSettings {
 
 export const DEFAULT_SETTINGS: WorkLedgerSettings = {
   executablePath: "",
+  useLegacyProjects: false,
   defaultView: "overview",
   eventLookbackDays: 35,
   savedFilters: [],
@@ -52,6 +54,12 @@ export class WorkLedgerSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    new Setting(containerEl)
+      .setName("Use legacy projects page")
+      .setDesc("Reopen the projects tab to use the previous page. Workspace preferences are preserved.")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.useLegacyProjects).onChange(async (value) => {
+        this.plugin.settings.useLegacyProjects = value; await this.plugin.saveSettings();
+      }));
     new Setting(containerEl).setName("CLI connection").setHeading();
     new Setting(containerEl)
       .setName("Read-only boundary")

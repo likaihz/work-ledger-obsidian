@@ -12,11 +12,13 @@ import {
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { developmentRoot } from "./dev-paths.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = path.resolve(packageRoot, "../..");
-const e2eRoot = path.join(packageRoot, ".e2e");
-const vaultName = "Agent Ledger Dev";
+const e2eRoot = path.join(developmentRoot(repositoryRoot), "obsidian");
+const vaultName = process.env.WORK_LEDGER_E2E_VAULT_NAME || "Agent Ledger Dev";
+if (!/^[\w -]+$/.test(vaultName)) throw new Error("Invalid synthetic Vault name");
 const vaultRoot = path.join(e2eRoot, vaultName);
 const configPath = path.join(e2eRoot, "config", "config.toml");
 const stateRoot = path.join(e2eRoot, "state");
@@ -85,8 +87,16 @@ function operation() {
 }
 
 function assertManagedPath() {
-  if (path.dirname(e2eRoot) !== packageRoot || path.basename(e2eRoot) !== ".e2e") {
+  if (path.dirname(e2eRoot) !== developmentRoot(repositoryRoot) || path.basename(e2eRoot) !== "obsidian") {
     throw new Error(`Refusing to manage unexpected local E2E path: ${e2eRoot}`);
+  }
+}
+
+function requireFixture() {
+  assertManagedPath();
+  const marker = existsSync(markerPath) ? JSON.parse(readFileSync(markerPath, "utf8")) : null;
+  if (!marker || marker.repository_root !== repositoryRoot || marker.vault_path !== vaultRoot || marker.vault_name !== vaultName) {
+    throw new Error("A matching synthetic Vault marker is required. Run local:setup with the original Vault name and checkout.");
   }
 }
 
@@ -299,9 +309,11 @@ function setup(args) {
   assertManagedPath();
   const reset = args.includes("--reset");
   if (reset && existsSync(e2eRoot)) {
+    requireFixture();
     rmSync(e2eRoot, { recursive: true, force: true });
   }
   if (existsSync(markerPath)) {
+    requireFixture();
     output(`Local E2E Vault already exists: ${vaultRoot}`);
     output("Use `npm run local:setup -- --reset` to rebuild the synthetic data.");
     return;
@@ -318,6 +330,7 @@ function setup(args) {
   writeObsidianConfiguration();
   writeJson(markerPath, {
     schema_version: 1,
+    repository_root: repositoryRoot,
     vault_name: vaultName,
     vault_path: vaultRoot,
     executable_path: executablePath,
@@ -329,9 +342,7 @@ function setup(args) {
 }
 
 function installPackage() {
-  if (!existsSync(markerPath)) {
-    throw new Error("Run `npm run local:setup` before installing the plugin.");
-  }
+  requireFixture();
   const distRoot = path.join(packageRoot, "dist", "agent-ledger");
   for (const artifact of ["main.js", "manifest.json", "styles.css"]) {
     if (!existsSync(path.join(distRoot, artifact))) {
@@ -383,6 +394,17 @@ function isValidScreenshot(file) {
 }
 
 function captureScreenshot(file) {
+  // Electron can return a stale frame for a hidden window even when its DOM is ready.
+  const painted = evaluate(`document.visibilityState !== "visible"
+    ? JSON.stringify({ visible: false })
+    : new Promise(resolve => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve(JSON.stringify({ visible: document.visibilityState === "visible" })));
+      });
+    })`);
+  if (!painted.visible) {
+    throw new Error(`Bring the ${vaultName} Vault window to the foreground before capturing evidence.`);
+  }
   rmSync(file, { force: true });
   try {
     runObsidian(["dev:screenshot", `path=${file}`]);
@@ -630,6 +652,7 @@ async function verifyKnowledge() {
 }
 
 async function verify(args) {
+  requireFixture();
   if (args[0] && args[0] !== "knowledge") {
     throw new Error(`Unsupported local verification target: ${args[0]}`);
   }

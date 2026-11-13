@@ -205,6 +205,7 @@ export class LedgerStore {
   setDetail(ref: EntityRef, revision: string, detail: Readonly<Record<string, unknown>>): void {
     const details = new Map(this.state.details);
     details.set(detailKey(ref, revision), detail);
+    while (details.size > 20) details.delete(details.keys().next().value!);
     this.update({ details, detailLoading: null });
   }
 
@@ -290,6 +291,14 @@ export function snapshotContains(snapshot: LedgerSnapshot, ref: EntityRef): bool
 }
 
 export function validateRelations(snapshot: LedgerSnapshot): void {
+  for (const collection of [snapshot.projects, snapshot.tasks, snapshot.events, snapshot.knowledge]) {
+    const ids = new Set<string>();
+    for (const item of collection) {
+      if (ids.has(item.id)) throw new Error("Snapshot contains duplicate IDs.");
+      ids.add(item.id);
+    }
+  }
+  if (new Set(snapshot.reports.map((r) => `${r.isoWeek}:${r.audience}`)).size !== snapshot.reports.length) throw new Error("Snapshot contains duplicate reports.");
   const projectIds = new Set(snapshot.projects.map((item) => item.id));
   const tasks = new Map(snapshot.tasks.map((item) => [item.id, item]));
   for (const task of snapshot.tasks) {
@@ -304,6 +313,16 @@ export function validateRelations(snapshot: LedgerSnapshot): void {
       if (parent.projectId !== task.projectId) {
         throw new Error(`Snapshot task ${task.id} disagrees with its parent project.`);
       }
+    }
+  }
+  for (const task of snapshot.tasks) {
+    const visited = new Set<string>();
+    let current: typeof task | undefined = task;
+    while (current) {
+      if (visited.has(current.id)) throw new Error("Snapshot task hierarchy contains a cycle.");
+      visited.add(current.id);
+      if (visited.size > 16) throw new Error("Snapshot task hierarchy exceeds depth 16.");
+      current = current.parentId ? tasks.get(current.parentId) : undefined;
     }
   }
   for (const event of snapshot.events) {

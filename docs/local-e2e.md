@@ -1,15 +1,15 @@
 # Local real-Obsidian verification
 
 Use this workflow for UI and integration changes that must be verified in the real
-Obsidian desktop runtime. It uses a repository-local synthetic Vault and the real
-Work Ledger CLI source. Never point these commands at a personal Vault.
+Obsidian desktop runtime. It uses a checkout-specific synthetic Vault outside the
+source repository and the real Work Ledger CLI source. Never point these commands
+at a personal Vault.
 
 ## One-time setup
 
 Requirements:
 
-- Obsidian desktop with the official `obsidian` CLI available (locally validated
-  with Obsidian 1.13.7);
+- Obsidian desktop 1.13.6 or newer with the official `obsidian` CLI available;
 - Python 3.11 or newer with `tomllib` and Git on `PATH`;
 - permission for the CLI to reach Obsidian's local IPC while the app is running.
 
@@ -26,8 +26,22 @@ npm run package
 npm run local:install-package
 ```
 
-Register the printed `.e2e/Agent Ledger Dev` directory in Obsidian once, trust the
-repository-built plugin, then keep that Vault open while running verification.
+Register the printed synthetic Vault directory in Obsidian once using **Open
+folder as vault**, trust the repository-built plugin, then keep that Vault open
+while running verification.
+Keep its window visible in the foreground. Electron can return an old screenshot
+for a hidden window even when DOM assertions pass; capture checks visibility and
+waits for two animation frames before requesting the image.
+An `obsidian://open` URI does not register a new Vault. Close any “Vault not found”
+dialog before retrying the CLI; native dialogs can block IPC commands.
+
+By default, generated fixtures, captures, capacity runs, and the pre-PR receipt
+live below `~/.cache/agent-ledger-dev/<checkout-hash>/`. Set `WORK_LEDGER_DEV_ROOT`
+to an absolute directory outside the checkout to override the cache base. Use the
+same value for setup, benchmarks, and the project harness. Set
+`WORK_LEDGER_E2E_VAULT_NAME` consistently when multiple checkouts need distinct
+Vault names. Existing repository-local fixtures are not moved or deleted
+automatically; close their Vault before archiving them outside the source tree.
 Rebuild the fixture only when its data contract changes. Close the synthetic Vault
 before resetting it:
 
@@ -35,8 +49,9 @@ before resetting it:
 npm run local:setup -- --reset
 ```
 
-The reset command only removes the package-owned `.e2e` directory after checking
-its exact path.
+The reset command only removes the checkout's `obsidian` artifact directory after
+checking its path and matching fixture marker. Install and verification also
+reject a fixture belonging to another checkout or Vault name.
 
 ## Development cycle
 
@@ -56,7 +71,7 @@ runtime errors, console errors, and any change below `Work/`. Console capture is
 attached only for the verification run and is detached afterward, including when
 an assertion fails. A debugger cleanup failure also fails the command.
 
-Evidence is written under `.e2e/captures/`:
+Evidence is written under the printed artifact directory's `obsidian/captures/`:
 
 ```text
 knowledge-default.png
@@ -87,7 +102,7 @@ Finish with:
 ```text
 obsidian vault="Agent Ledger Dev" dev:errors
 obsidian vault="Agent Ledger Dev" dev:console level=error
-git -C ".e2e/Agent Ledger Dev" status --short -- Work
+git -C "<printed-synthetic-vault-path>" status --short -- Work
 obsidian vault="Agent Ledger Dev" dev:debug off
 ```
 
