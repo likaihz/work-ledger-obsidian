@@ -119,6 +119,72 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     expect((document.activeElement as HTMLElement).dataset.taskId).toBe("task-09999");
     expect(root.querySelectorAll('[data-task-id][tabindex="0"]')).toHaveLength(1);
   });
+  it("scrolling after collapsing a tree row never focus-scrolls back to that row", () => {
+    vi.useFakeTimers();
+    const { root, store, view } = mount(), snapshot = fixture(), task = snapshot.tasks[0]!;
+    snapshot.tasks = Array.from({ length: 200 }, (_, i) => {
+      const n = String(i).padStart(3, "0");
+      return [{ ...task, id: `p-${n}`, title: `Parent ${n}`, parentId: null }, { ...task, id: `c-${n}`, title: `Child ${n}`, parentId: `p-${n}` }];
+    }).flat();
+    store.applySnapshot(snapshot); view.update(store.get()); click(root, "树");
+    click(root, "收起Parent 000");
+    const collapsed = document.activeElement as HTMLElement;
+    expect(collapsed.dataset.taskId).toBe("p-000"); expect(collapsed.getAttribute("aria-expanded")).toBe("false");
+    const viewport = collapsed.closest<HTMLElement>(".wl-virtual")!;
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    // The collapsed row is still mounted in the overscan window while the range advances.
+    viewport.scrollTop = 82 * 3; viewport.dispatchEvent(new Event("scroll")); vi.advanceTimersToNextFrame();
+    const restored = document.activeElement as HTMLElement;
+    expect(restored.dataset.taskId).toBe("p-000"); expect(restored).not.toBe(collapsed);
+    expect(focus.mock.calls.length).toBeGreaterThan(0);
+    for (const [options] of focus.mock.calls) expect(options).toEqual({ preventScroll: true });
+    expect(viewport.scrollTop).toBe(82 * 3);
+  });
+  it.each(["wheel", "pointerdown", "touchstart", "blur"])("End follows measured row heights until %s takes over", (input) => {
+    vi.useFakeTimers();
+    const observers: Observer[] = [];
+    class Observer {
+      targets = new Set<Element>();
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+      observe(target: Element) { this.targets.add(target); }
+      unobserve(target: Element) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
+    }
+    vi.stubGlobal("ResizeObserver", Observer);
+    const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    try {
+      const { root, store, view } = mount(), snapshot = fixture(), task = snapshot.tasks[0]!;
+      snapshot.tasks = Array.from({ length: 1000 }, (_, i) => ({ ...task, id: `task-${String(i).padStart(5, "0")}`, title: `Task ${String(i).padStart(5, "0")}` }));
+      store.applySnapshot(snapshot); view.update(store.get()); click(root, "列表");
+      const first = root.querySelector<HTMLElement>("[data-task-id]")!;
+      const viewport = first.closest<HTMLElement>(".wl-virtual")!;
+      Object.defineProperty(viewport, "clientHeight", { value: 300 });
+      first.focus(); first.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+      const estimatedTop = viewport.scrollTop;
+      const measure = (height: number) => {
+        for (const observer of observers) {
+          const rows = [...observer.targets].filter((row) => row.isConnected && row.hasAttribute("data-row-index"));
+          if (rows.length) observer.callback(rows.map((target) => ({ target, borderBoxSize: [{ blockSize: height }] })) as unknown as ResizeObserverEntry[], observer);
+        }
+        vi.advanceTimersToNextFrame();
+      };
+      measure(40);
+      expect(viewport.scrollTop).toBeLessThan(estimatedTop);
+      expect((document.activeElement as HTMLElement).dataset.taskId).toBe("task-00999");
+      const outside = root.createEl("button");
+      if (input === "blur") outside.focus();
+      else viewport.dispatchEvent(new Event(input, { bubbles: true }));
+      viewport.scrollTop = 1000; viewport.dispatchEvent(new Event("scroll"));
+      measure(50);
+      expect(viewport.scrollTop).toBe(1000);
+      expect(document.activeElement).toBe(input === "blur" ? outside : viewport);
+    } finally {
+      vi.unstubAllGlobals();
+      if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
   it("identity failure removes mounted task content and an open filter", () => {
     const { root, store, view } = mount(); click(root, "筛选，1 项限制");
     store.clearBusinessState("Vault mismatch", "VAULT_MISMATCH"); view.update(store.get());
