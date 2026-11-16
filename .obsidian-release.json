@@ -1,11 +1,11 @@
 {
   "assets": {
-    "main.js": "c4a980ea28fbebab0249922810d5b1f0b89e0dc74bde6996dd491f0c5e9873b8",
-    "manifest.json": "6df23a65f5ff1a4e9e7784aaf9a7395ce56c02ac1770c762521bd824f6e58c8e",
-    "styles.css": "e491b71c843fd40106d595193a2c35adf85085980b0676d376b0cd608f55b356"
+    "main.js": "31906cfdb47ea187fbfd20ad0b58d67a9c7aa2430b84bd06661d0f59e7d46660",
+    "manifest.json": "a7e51595372cb74ea376fcd1f65b2db83755c8eef8aa9de7ca9612a6cd5c4374",
+    "styles.css": "c9b8fa958808f35962457b896780d9431f81a3d25c83f9966c230fe14cd363de"
   },
   "schema_version": 1,
-  "snapshot_manifest_sha256": "1d77b57743cdcd14df06bcc04a448453831409c9d0f70e46d5947493f33784db",
-  "source_sha": "ce6586e7c10d811020444c12397ce71eb46cc954",
-  "version": "0.1.11"
+  "snapshot_manifest_sha256": "157b64244759d5f4277f713c736d0ae92fc0617f422703c613550cc75fe34210",
+  "source_sha": "24d8660e8ec67335ca7446162ddcb443c06646a9",
+  "version": "0.1.12"
 }

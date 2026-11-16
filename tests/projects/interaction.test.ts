@@ -22,6 +22,15 @@ beforeAll(() => {
     empty(this: HTMLElement) { this.replaceChildren(); },
     addClass(this: HTMLElement, name: string) { this.classList.add(name); },
   });
+  // jsdom ships no modal <dialog> behavior; the view only needs open/close and the
+  // cancel event to exercise its own focus bookkeeping.
+  if (!("showModal" in HTMLDialogElement.prototype)) {
+    Object.defineProperties(HTMLDialogElement.prototype, {
+      showModal: { configurable: true, value(this: HTMLDialogElement) { this.setAttribute("open", ""); } },
+      close: { configurable: true, value(this: HTMLDialogElement) { this.removeAttribute("open"); } },
+      open: { configurable: true, get(this: HTMLDialogElement) { return this.hasAttribute("open"); } },
+    });
+  }
 });
 const views: ProjectsWorkspaceView[] = [];
 afterEach(() => { for (const view of views) view.unmount(); views.length = 0; document.body.replaceChildren(); vi.useRealTimers(); });
@@ -35,6 +44,16 @@ function mount() {
 function click(root: HTMLElement, name: string) {
   const control = Array.from(root.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.getAttribute("aria-label") === name);
   expect(control, name).toBeTruthy(); control!.click(); return control!;
+}
+/** Layout lives in the segmented radiogroup now; switch it by visible label. */
+function setLayout(root: HTMLElement, name: string) {
+  const input = Array.from(root.querySelectorAll<HTMLInputElement>(".wl-segmented input[type='radio']"))
+    .find((radio) => root.querySelector(`label[for="${radio.id}"]`)?.textContent === name);
+  expect(input, name).toBeTruthy(); input!.click(); return input!;
+}
+function matchedIds(view: ProjectsWorkspaceView): string[] | null {
+  const evaluation = view.model.evaluation;
+  return evaluation && evaluation.kind !== "query-unavailable" ? [...evaluation.matchedIds] : null;
 }
 function names(root: HTMLElement) { return Array.from(root.querySelectorAll<HTMLElement>("[data-task-id]")).map((row) => row.dataset.taskId); }
 describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
@@ -55,7 +74,7 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     expect(root.querySelectorAll(".wl-board-column")).toHaveLength(6);
   });
   it("refresh preserves logical focus and closing a task detail returns it to the task", async () => {
-    const { root, store, view } = mount(); click(root, "列表");
+    const { root, store, view } = mount(); setLayout(root, "列表");
     const row = root.querySelector<HTMLElement>('[data-task-id="t2"]')!; row.focus();
     store.applySnapshot(structuredClone(fixture())); view.update(store.get());
     expect((document.activeElement as HTMLElement).dataset.taskId).toBe("t2");
@@ -76,8 +95,8 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     }
     expect(view.model.evaluation).toMatchObject({ matchedIds: ["t2"] });
     click(panel, "关闭"); expect(root.querySelector(".wl-project-panel")).toBeNull();
-    click(root, "列表"); expect(names(root)).toEqual(["t2"]);
-    click(root, "树"); expect(names(root)).toEqual(["t1", "t2"]);
+    setLayout(root, "列表"); expect(names(root)).toEqual(["t2"]);
+    setLayout(root, "树"); expect(names(root)).toEqual(["t1", "t2"]);
     expect(root.querySelector('[data-task-id="t1"]')?.getAttribute("aria-expanded")).toBe("true");
     expect(root.querySelector('[data-task-id="t2"]')?.hasAttribute("aria-expanded")).toBe(false);
     click(root, "收起t1 主任务"); expect(names(root)).toEqual(["t1"]); expect(view.model.selected).toBeNull();
@@ -86,7 +105,7 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
   it("10k list uses bounded DOM and End mounts the actual final logical task", () => {
     const { root, store, view } = mount(), snapshot = fixture(), task = snapshot.tasks[0]!;
     snapshot.tasks = Array.from({ length: 10_000 }, (_, i) => ({ ...task, id: `task-${String(i).padStart(5, "0")}`, title: `Task ${String(i).padStart(5, "0")}`, tags: i === 9999 ? ["z"] : [] }));
-    store.applySnapshot(snapshot); view.update(store.get()); click(root, "列表");
+    store.applySnapshot(snapshot); view.update(store.get()); setLayout(root, "列表");
     expect(names(root).length).toBeLessThan(30); expect(root.querySelector(".wl-result-count")?.textContent).toBe("10000 项");
     const first = root.querySelector<HTMLElement>("[data-task-id]")!; first.focus(); first.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
     expect((document.activeElement as HTMLElement).dataset.taskId).toBe("task-09999"); expect(names(root).length).toBeLessThan(30);
@@ -108,7 +127,7 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     vi.useFakeTimers();
     const { root, store, view } = mount(), snapshot = fixture(), task = snapshot.tasks[0]!;
     snapshot.tasks = Array.from({ length: 10_000 }, (_, i) => ({ ...task, id: `task-${String(i).padStart(5, "0")}`, title: `Task ${String(i).padStart(5, "0")}` }));
-    store.applySnapshot(snapshot); view.update(store.get()); click(root, "列表");
+    store.applySnapshot(snapshot); view.update(store.get()); setLayout(root, "列表");
     const first = root.querySelector<HTMLElement>("[data-task-id]")!;
     const viewport = first.closest<HTMLElement>(".wl-virtual")!;
     first.focus(); first.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
@@ -126,7 +145,7 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
       const n = String(i).padStart(3, "0");
       return [{ ...task, id: `p-${n}`, title: `Parent ${n}`, parentId: null }, { ...task, id: `c-${n}`, title: `Child ${n}`, parentId: `p-${n}` }];
     }).flat();
-    store.applySnapshot(snapshot); view.update(store.get()); click(root, "树");
+    store.applySnapshot(snapshot); view.update(store.get()); setLayout(root, "树");
     click(root, "收起Parent 000");
     const collapsed = document.activeElement as HTMLElement;
     expect(collapsed.dataset.taskId).toBe("p-000"); expect(collapsed.getAttribute("aria-expanded")).toBe("false");
@@ -156,7 +175,7 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     try {
       const { root, store, view } = mount(), snapshot = fixture(), task = snapshot.tasks[0]!;
       snapshot.tasks = Array.from({ length: 1000 }, (_, i) => ({ ...task, id: `task-${String(i).padStart(5, "0")}`, title: `Task ${String(i).padStart(5, "0")}` }));
-      store.applySnapshot(snapshot); view.update(store.get()); click(root, "列表");
+      store.applySnapshot(snapshot); view.update(store.get()); setLayout(root, "列表");
       const first = root.querySelector<HTMLElement>("[data-task-id]")!;
       const viewport = first.closest<HTMLElement>(".wl-virtual")!;
       Object.defineProperty(viewport, "clientHeight", { value: 300 });
@@ -190,5 +209,188 @@ describe("OBV-006/008/012 projects interaction / AC-10,11,21–25", () => {
     store.clearBusinessState("Vault mismatch", "VAULT_MISMATCH"); view.update(store.get());
     expect(root.querySelector(".wl-project-panel")).toBeNull(); expect(names(root)).toEqual([]); expect(view.model.lastSuccess).toBeNull();
     expect(root.textContent).not.toContain("t1 主任务");
+  });
+});
+
+describe("VEN-95 toolbar & popover / A01–A04", () => {
+  it("A01 segmented layout control keeps radiogroup semantics, query set, and toolbar focus", () => {
+    const { root, view } = mount();
+    const group = root.querySelector<HTMLElement>('[role="radiogroup"][aria-label="视图布局"]')!;
+    expect(group).toBeTruthy();
+    const radios = Array.from(group.querySelectorAll<HTMLInputElement>("input[type='radio']"));
+    expect(radios).toHaveLength(3);
+    expect(new Set(radios.map((radio) => radio.name)).size).toBe(1);
+    expect(radios.find((radio) => radio.checked)!.value).toBe(view.model.view.presentation.layout);
+    const queryBefore = structuredClone(view.model.view.query);
+    const matchedBefore = matchedIds(view);
+    expect(matchedBefore).not.toBeNull();
+    radios[0]!.focus();
+    setLayout(root, "列表");
+    expect(view.model.view.presentation.layout).toBe("list");
+    expect(radios.find((radio) => radio.checked)!.value).toBe("list");
+    expect(view.model.view.query).toEqual(queryBefore);
+    expect(matchedIds(view)).toEqual(matchedBefore);
+    // Focus stays on the radio; layout switching never lands in the results.
+    expect(group.contains(document.activeElement)).toBe(true);
+    expect((document.activeElement as HTMLElement).closest("[data-task-id]")).toBeNull();
+    // Labels stay linked so clicks, hits, and screen readers agree per option.
+    for (const radio of radios) expect(group.querySelector(`label[for="${radio.id}"]`)?.textContent).toBeTruthy();
+    // Home/End are not provided by the platform radio group in Chromium; the
+    // group guarantees them via a delegated handler (disabled options skipped).
+    const press = (radio: HTMLInputElement, key: string) =>
+      radio.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    const checked = () => radios.find((radio) => radio.checked)!.value;
+    press(radios[1]!, "End");
+    expect(checked()).toBe("tree");
+    expect(document.activeElement).toBe(radios[2]!);
+    press(radios[2]!, "Home");
+    expect(checked()).toBe("board");
+    expect(document.activeElement).toBe(radios[0]!);
+    press(radios[0]!, "Home"); // already first: focus stays, selection unchanged
+    expect(checked()).toBe("board");
+    expect(view.model.view.query).toEqual(queryBefore);
+    expect(matchedIds(view)).toEqual(matchedBefore);
+  });
+  it("A02 panel mounts synchronously, syncs trigger state, and leaves no residue across toggles", async () => {
+    const { root } = mount();
+    const chip = root.querySelector<HTMLButtonElement>('button[aria-label^="筛选，"]')!;
+    chip.click();
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    expect(panel.getAttribute("role")).toBe("dialog");
+    expect(panel.querySelector("fieldset")).toBeTruthy();
+    expect(chip.getAttribute("aria-expanded")).toBe("true");
+    expect(chip.getAttribute("aria-controls")).toBe(panel.id);
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    click(panel, "关闭");
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
+    expect(chip.hasAttribute("aria-controls")).toBe(false);
+    expect(root.querySelector<HTMLElement>(".wl-overlay")!.childElementCount).toBe(0);
+    expect(removeSpy).toHaveBeenCalledWith("pointerdown", expect.any(Function), true);
+    removeSpy.mockRestore();
+    chip.click();
+    await vi.waitFor(() => expect(root.querySelector(".wl-project-panel")?.classList.contains("is-open")).toBe(true));
+    click(root.querySelector<HTMLElement>(".wl-project-panel")!, "关闭");
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(root.querySelector<HTMLElement>(".wl-overlay")!.childElementCount).toBe(0);
+  });
+  it("A03 Esc closes the panel, returns focus to the trigger, and keeps filter conditions", async () => {
+    const { root, view } = mount();
+    const chip = click(root, "筛选，1 项限制");
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    const statusGroup = panel.querySelector("fieldset")!;
+    const blocked = Array.from(statusGroup.querySelectorAll<HTMLInputElement>("input"))
+      .find((input) => input.parentElement!.textContent === "阻塞")!;
+    blocked.click();
+    expect(view.model.view.query.statuses).toEqual(["inbox", "planned", "in_progress"]);
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(document.activeElement).toBe(chip);
+    // Closing never discards the picked conditions; a fresh panel reflects them.
+    expect(view.model.view.query.statuses).toEqual(["inbox", "planned", "in_progress"]);
+    click(root, "筛选，1 项限制");
+    const reopened = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    const blockedAgain = Array.from(reopened.querySelectorAll<HTMLInputElement>("fieldset input"))
+      .find((input) => input.parentElement!.textContent === "阻塞")!;
+    expect(blockedAgain.checked).toBe(false);
+  });
+  it("A03 Esc inside the panel does not leak to the host page", async () => {
+    const { root } = mount();
+    click(root, "筛选，1 项限制");
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    const leaked = vi.fn();
+    document.body.addEventListener("keydown", leaked);
+    try {
+      panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(leaked).not.toHaveBeenCalled();
+      expect(root.querySelector(".wl-project-panel")).toBeNull();
+    } finally {
+      document.body.removeEventListener("keydown", leaked);
+    }
+  });
+  it("A03 an outside pointer press closes without stealing focus", async () => {
+    const { root } = mount();
+    const chip = click(root, "筛选，1 项限制");
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    const search = root.querySelector<HTMLInputElement>('input[aria-label="搜索任务标题、ID、标签"]')!;
+    search.focus();
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(document.activeElement).toBe(search);
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
+  });
+  it("A03 Tab past the last panel stop closes and hands focus to the next toolbar stop", async () => {
+    const { root } = mount();
+    click(root, "筛选，1 项限制");
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    const focusable = Array.from(panel.querySelectorAll<HTMLElement>("button, input, select"));
+    const last = focusable[focusable.length - 1]!;
+    last.focus();
+    last.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(document.activeElement).not.toBe(last);
+    expect((document.activeElement as HTMLElement).closest(".wl-project-panel")).toBeNull();
+    expect((document.activeElement as HTMLElement).closest(".wl-project-toolbar")).toBeTruthy();
+    expect(document.activeElement).toBe(root.querySelector<HTMLInputElement>(".wl-segmented input[type='radio']"));
+    // Shift+Tab from the first stop steps back to the control before the trigger.
+    click(root, "筛选，1 项限制");
+    const reopened = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(reopened.classList.contains("is-open")).toBe(true));
+    const first = Array.from(reopened.querySelectorAll<HTMLElement>("button, input, select"))[0]!;
+    first.focus();
+    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector<HTMLInputElement>('input[aria-label="搜索任务标题、ID、标签"]'));
+  });
+  it("A03 a vanished trigger closes the popover and falls back into the toolbar", async () => {
+    const { root } = mount();
+    const chip = click(root, "筛选，1 项限制");
+    await vi.waitFor(() => expect(root.querySelector(".wl-project-panel")?.classList.contains("is-open")).toBe(true));
+    chip.remove();
+    window.dispatchEvent(new Event("resize"));
+    await vi.waitFor(() => expect(root.querySelector(".wl-project-panel")).toBeNull());
+    expect(document.activeElement).toBe(root.querySelector<HTMLElement>(".wl-project-toolbar button, .wl-project-toolbar input"));
+  });
+  it("A03 a modal stacked over the panel owns Esc until it closes", async () => {
+    const { root } = mount();
+    click(root, "筛选，1 项限制");
+    const panel = root.querySelector<HTMLElement>(".wl-project-panel")!;
+    await vi.waitFor(() => expect(panel.classList.contains("is-open")).toBe(true));
+    click(root, "保存视图");
+    const dialog = root.querySelector<HTMLDialogElement>(".wl-project-dialog")!;
+    expect(dialog).toBeTruthy();
+    expect(dialog.open).toBe(true);
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).not.toBeNull();
+    dialog.dispatchEvent(new Event("cancel", { bubbles: true }));
+    expect(root.querySelector(".wl-project-dialog")).toBeNull();
+    expect(root.querySelector(".wl-project-panel")).not.toBeNull();
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(root.querySelector(".wl-project-panel")).toBeNull();
+  });
+  it("A04 a failed save keeps the dialog, its input, and its error message", async () => {
+    const { root, view } = mount();
+    const failing = {
+      load: async () => ({ fileRevision: 0, views: [] }),
+      mutate: async () => { throw new Error("vault busy"); },
+      claimRecent: () => 0,
+    };
+    (view as unknown as { host: { preferences: unknown } }).host.preferences = failing;
+    click(root, "保存视图");
+    const dialog = root.querySelector<HTMLDialogElement>(".wl-project-dialog")!;
+    const input = dialog.querySelector<HTMLInputElement>('input[aria-label="视图名称"]')!;
+    input.value = "我的视图";
+    click(dialog, "保存");
+    await vi.waitFor(() => expect(dialog.textContent).toContain("vault busy"));
+    expect(root.querySelector(".wl-project-dialog")).not.toBeNull();
+    expect(dialog.querySelector<HTMLInputElement>('input[aria-label="视图名称"]')!.value).toBe("我的视图");
+    expect(view.model.activeSavedId).toBeNull();
+    click(dialog, "取消");
+    expect(root.querySelector(".wl-project-dialog")).toBeNull();
   });
 });
